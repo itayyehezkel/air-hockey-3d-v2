@@ -1,0 +1,19 @@
+{
+  "appId": "com.airhockey3d.game",
+  "appName": "Air Smash",
+  "webDir": "dist",
+  "backgroundColor": "#2a8cf5",
+  "ios": {
+    "contentInset": "never"
+  },
+  "android": {
+    "backgroundColor": "#2a8cf5"
+  },
+  "plugins": {
+    "SystemBars": {
+      "hidden": true,
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover"
+    }
+  }
+}

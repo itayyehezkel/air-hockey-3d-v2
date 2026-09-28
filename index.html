@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#2a8cf5" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Air Smash</title>
+    <link rel="icon" type="image/png" href="./favicon.png" />
+  </head>
+  <body>
+    <!-- All UI art is cut straight from the Scenario mockups (src/assets/ui). Buttons inside the
+         popup sprites are transparent hit areas positioned in % of the sprite. -->
+    <div id="bg"></div>
+    <!-- Locker pedestal sits behind the transparent 3D canvas, so the live mallet stands on it. -->
+    <div id="lockerStage" class="hidden"><div id="lockerPedestal" class="locker-pedestal"></div></div>
+    <canvas id="renderCanvas"></canvas>
+
+    <!-- Home screen -->
+    <section id="home" class="screen hidden">
+      <button id="settingsBtn" class="sprite-btn gear-btn" aria-label="Settings"></button>
+      <h1 class="logo" aria-label="Air Smash"></h1>
+      <button id="playBtn" class="sprite-btn play-btn" aria-label="Play"></button>
+      <button id="lockerBtn" class="sprite-btn locker-btn" aria-label="Locker"></button>
+    </section>
+
+    <!-- Locker: 3D preview on the pedestal (drag to look around), tabs, and code-built cards. -->
+    <section id="locker" class="screen hidden">
+      <button id="lockerBackBtn" class="sprite-btn locker-back" aria-label="Back"></button>
+      <h2 class="locker-title" aria-label="Locker"></h2>
+      <div class="locker-tabs" role="tablist">
+        <button class="locker-tab active" data-tab="mallets" role="tab">MALLETS</button>
+        <button class="locker-tab" data-tab="pucks" role="tab">PUCKS</button>
+        <button class="locker-tab" data-tab="tables" role="tab">TABLES</button>
+      </div>
+      <div class="locker-panel"><div id="lockerGrid" class="locker-grid"></div></div>
+    </section>
+
+    <!-- In-game HUD -->
+    <section id="hud" class="hidden">
+      <div class="score-bar">
+        <span id="scoreAi" class="num score-cpu" aria-label="Opponent score">0</span>
+        <span id="scorePlayer" class="num score-you" aria-label="Your score">0</span>
+      </div>
+      <button id="pauseBtn" class="sprite-btn pause-btn" aria-label="Pause"></button>
+      <div id="banner" class="banner"></div>
+    </section>
+
+    <!-- Pause menu -->
+    <section id="pauseMenu" class="modal hidden">
+      <div class="popup pause-popup">
+        <button id="resumeBtn" class="hit" style="--l: 16%; --t: 32.2%; --w: 67.6%; --h: 15.2%" aria-label="Resume"></button>
+        <button id="restartBtn" class="hit" style="--l: 15.6%; --t: 53.7%; --w: 68.5%; --h: 14.1%" aria-label="Restart"></button>
+        <button id="homeBtn" class="hit" style="--l: 15.6%; --t: 72.5%; --w: 68.1%; --h: 15.9%" aria-label="Home"></button>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="settingsMenu" class="modal hidden">
+      <div class="popup settings-popup">
+        <label class="hit toggle" style="--l: 17%; --t: 34.6%; --w: 68%; --h: 14.4%">
+          <input id="soundToggle" type="checkbox" checked aria-label="Sound" />
+        </label>
+        <div class="switch-off" data-for="soundToggle" style="--l: 62.5%; --t: 36.6%; --w: 21.9%; --h: 10.4%"></div>
+        <label class="hit toggle" style="--l: 17%; --t: 54.9%; --w: 68%; --h: 14%">
+          <input id="vibrationToggle" type="checkbox" checked aria-label="Vibration" />
+        </label>
+        <div class="switch-off" data-for="vibrationToggle" style="--l: 62.5%; --t: 56.9%; --w: 21.9%; --h: 10%"></div>
+        <button id="closeSettingsBtn" class="hit" style="--l: 15.2%; --t: 73.6%; --w: 69.2%; --h: 15.5%" aria-label="OK"></button>
+      </div>
+    </section>
+
+    <!-- Result popup (win and lose sprites share one layout) -->
+    <section id="result" class="modal hidden">
+      <div class="popup result-popup">
+        <span id="finalPlayer" class="num final-you" aria-label="Your score">7</span>
+        <span id="finalAi" class="num final-cpu" aria-label="Opponent score">3</span>
+        <button id="againBtn" class="hit" style="--l: 16.3%; --t: 66.9%; --w: 66.8%; --h: 11.3%" aria-label="Play again"></button>
+        <button id="backBtn" class="hit" style="--l: 16.3%; --t: 82.2%; --w: 66.8%; --h: 10.8%" aria-label="Home"></button>
+      </div>
+    </section>
+
+    <div id="fade"></div>
+
+    <!-- Studio intro: continues the native white launch screen, then fades into the game. -->
+    <div id="splash" aria-label="Pixel Pop Studio">
+      <div id="splashBurst" class="splash-burst"></div>
+      <div id="studioLogo" class="studio-logo"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

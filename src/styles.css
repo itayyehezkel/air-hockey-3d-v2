@@ -1,0 +1,612 @@
+:root {
+  --navy: #0d2f7a;
+  --navy-deep: #0a2362;
+  --font: 'Fredoka', system-ui, sans-serif;
+  /* Capacitor injects --safe-area-inset-* on Android WebViews where env() isn't reliable. */
+  --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  /* Thick navy outline for white UI text (stacked shadows keep the glyphs intact). */
+  --outline:
+    2px 2px 0 var(--navy), -2px 2px 0 var(--navy), 2px -2px 0 var(--navy), -2px -2px 0 var(--navy),
+    0 2.5px 0 var(--navy), 0 -2.5px 0 var(--navy), 2.5px 0 0 var(--navy), -2.5px 0 0 var(--navy),
+    0 3.5px 0 var(--navy-deep);
+  /* Locker layout (measured from the Locker mockup): pedestal, then tabs, then the card panel. */
+  --lk-ped-top: calc(var(--safe-top) + 22vh);
+  --lk-ped-w: min(60vw, 330px);
+  --lk-tabs-top: calc(var(--lk-ped-top) + var(--lk-ped-w) * 231 / 432 + 2.5vh);
+  --lk-tab-h: min(10.5vw, 58px);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #2a8cf5;
+  font-family: var(--font);
+  color: #fff;
+  overscroll-behavior: none;
+}
+
+button {
+  font-family: var(--font);
+}
+
+/* Sunburst + confetti plate from the home mockup (Scenario edit). */
+#bg {
+  position: fixed;
+  inset: 0;
+  background: #3aa8ff url('./assets/ui/bg.jpg') center / cover no-repeat;
+}
+
+#renderCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  outline: none;
+  touch-action: none;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ---------- Sprite buttons ---------- */
+.sprite-btn {
+  position: absolute;
+  padding: 0;
+  border: none;
+  background: center / contain no-repeat;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.08s ease, filter 0.08s ease;
+}
+
+.sprite-btn:active {
+  transform: translateY(3px) scale(0.95);
+  filter: brightness(0.92);
+}
+
+/* A tap is too short for :active to show, so every tap also plays this quick press-and-release.
+   It runs on `translate`/`scale` (not `transform`) so it stacks with the entrance and breathe animations. */
+.sprite-btn.pressed {
+  animation: press 0.18s ease-out;
+}
+
+@keyframes press {
+  0%, 100% { translate: 0 0; filter: none; }
+  40% { translate: 0 3px; scale: 0.92; filter: brightness(0.92); }
+}
+
+/* Big white numbers in the mockup style: rounded bold digits, navy outline, dark 3D edge.
+   Sized in container units so they scale with the sprite they sit on. */
+.num {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: linear-gradient(180deg, #ffffff 55%, #dce8f7 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter:
+    drop-shadow(0.035em 0 0 var(--navy)) drop-shadow(-0.035em 0 0 var(--navy))
+    drop-shadow(0 0.035em 0 var(--navy)) drop-shadow(0 -0.035em 0 var(--navy))
+    drop-shadow(0 0.06em 0 var(--navy-deep));
+  pointer-events: none;
+}
+
+/* ---------- Home (positions measured from the home mockup, 1024x1824) ---------- */
+.screen {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.gear-btn {
+  top: calc(var(--safe-top) + 1.6vh);
+  left: 3vw;
+  width: min(14vw, 64px);
+  aspect-ratio: 143 / 143;
+  background-image: url('./assets/ui/gear.webp');
+  animation: popIn 0.5s 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+.logo {
+  position: absolute;
+  top: calc(var(--safe-top) + 8.5vh);
+  left: 50%;
+  width: min(77vw, 420px);
+  aspect-ratio: 747 / 405;
+  margin: 0 0 0 calc(min(77vw, 420px) / -2);
+  background: url('./assets/ui/logo.webp') center / contain no-repeat;
+  animation: introDown 0.8s 0.1s cubic-bezier(0.2, 1.3, 0.3, 1) both, floatY 4s 1s ease-in-out infinite;
+}
+
+.play-btn {
+  bottom: calc(var(--safe-bottom) + 9vh);
+  left: 50%;
+  width: min(56vw, 320px);
+  aspect-ratio: 570 / 281;
+  margin-left: calc(min(56vw, 320px) / -2);
+  background-image: url('./assets/ui/play.webp');
+  animation: introUp 0.7s 0.45s cubic-bezier(0.2, 1.3, 0.3, 1) backwards, breathe 1.6s 1.2s ease-in-out infinite;
+}
+
+/* ---------- HUD (positions from the game mockup) ---------- */
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  --bar-w: min(58vw, 330px);
+  --bar-top: calc(var(--safe-top) + 2.8vh);
+  --btn: min(14vw, 64px);
+}
+
+.score-bar {
+  position: absolute;
+  top: var(--bar-top);
+  left: 50%;
+  width: var(--bar-w);
+  aspect-ratio: 632 / 256;
+  margin-left: calc(var(--bar-w) / -2);
+  background: url('./assets/ui/scorebar.webp') center / contain no-repeat;
+  container-type: inline-size;
+}
+
+.score-bar .num {
+  /* Centered in the free area under the OPP/YOU label (badge spans ~18%–80% of the bar). */
+  top: 58.5%;
+  font-size: 16.5cqw;
+}
+
+.score-cpu {
+  left: 25.2%;
+}
+
+.score-you {
+  left: 74.8%;
+}
+
+.pause-btn {
+  /* Top-left, vertically centered on the score bar (its art is centered at 50.8% of the sprite). */
+  top: calc(var(--bar-top) + var(--bar-w) * 256 / 632 * 0.508 - var(--btn) / 2);
+  left: 3.5vw;
+  width: var(--btn);
+  aspect-ratio: 144 / 145;
+  background-image: url('./assets/ui/pausebtn.webp');
+}
+
+.banner {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  transform: translateY(-50%);
+  font-weight: 700;
+  font-size: clamp(72px, 24vw, 140px);
+  letter-spacing: 0.02em;
+  opacity: 0;
+  color: #fff;
+  will-change: transform, opacity;
+}
+
+/* ---------- Popups ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 40, 120, 0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: fadeIn 0.25s ease both;
+}
+
+.popup {
+  position: relative;
+  background: center / contain no-repeat;
+  container-type: inline-size;
+  animation: cardIn 0.5s cubic-bezier(0.2, 1.3, 0.3, 1) both;
+}
+
+.pause-popup {
+  width: min(88vw, 420px);
+  aspect-ratio: 899 / 1081;
+  background-image: url('./assets/ui/pausepanel.webp');
+}
+
+.settings-popup {
+  width: min(88vw, 420px);
+  aspect-ratio: 896 / 1082;
+  background-image: url('./assets/ui/settingspanel.webp');
+}
+
+.result-popup {
+  width: min(92vw, 440px);
+  aspect-ratio: 900 / 1297;
+  background-image: url('./assets/ui/winpanel.webp');
+}
+
+.modal.lose .result-popup {
+  aspect-ratio: 900 / 1291;
+  background-image: url('./assets/ui/losepanel.webp');
+}
+
+.result-popup .num {
+  /* Ink centered in the free area under the YOU/OPP label (label ends at 49.3%, box inner edge
+     ~62.3% → center 55.8%). The digits' ink incl. 3D shadow sits 0.055em (0.6% here) below the
+     text box center, so the box goes a little higher. */
+  top: 55.2%;
+  font-size: 16.5cqw;
+}
+
+.final-you {
+  left: 31.05%;
+}
+
+.final-cpu {
+  left: 68.55%;
+}
+
+/* Transparent hit area over a button painted in the sprite; darkens while pressed. */
+.hit {
+  position: absolute;
+  left: var(--l);
+  top: var(--t);
+  width: var(--w);
+  height: var(--h);
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.08s ease, transform 0.08s ease;
+}
+
+.hit:active {
+  background: rgba(8, 20, 70, 0.2);
+  transform: scale(0.97);
+}
+
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* OFF state for a painted ON switch: the same patch of the sprite, mirrored (knob moves left)
+   and desaturated (green turns gray). */
+.switch-off {
+  position: absolute;
+  inset: 0;
+  background: url('./assets/ui/settingspanel.webp') center / contain no-repeat;
+  clip-path: inset(var(--t) calc(100% - var(--l) - var(--w)) calc(100% - var(--t) - var(--h)) var(--l) round 999px);
+  transform-origin: calc(var(--l) + var(--w) / 2) 50%;
+  transform: scaleX(-1);
+  filter: grayscale(1) brightness(1.08);
+  pointer-events: none;
+  display: none;
+}
+
+.switch-off.on {
+  display: block;
+}
+
+#fade {
+  position: fixed;
+  inset: 0;
+  background: #1a6fe0;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+
+#fade.clear {
+  opacity: 0;
+}
+
+/* ---------- Locker ---------- */
+/* Home: round Locker button in the bottom-right corner, level with the PLAY button. */
+.locker-btn {
+  right: 3.5vw;
+  bottom: calc(var(--safe-bottom) + 9vh + min(56vw, 320px) * 281 / 570 / 2 - min(14vw, 64px) / 2);
+  width: min(14vw, 64px);
+  aspect-ratio: 246 / 249;
+  background-image: url('./assets/ui/locker/btn_locker.webp');
+  animation: popIn 0.5s 0.55s cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+#lockerStage {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.locker-pedestal {
+  position: absolute;
+  top: var(--lk-ped-top);
+  left: 50%;
+  width: var(--lk-ped-w);
+  aspect-ratio: 432 / 231;
+  margin-left: calc(var(--lk-ped-w) / -2);
+  background: url('./assets/ui/locker/pedestal.webp') center / contain no-repeat;
+}
+
+.locker-back {
+  top: calc(var(--safe-top) + 1.6vh);
+  left: 3vw;
+  width: min(14vw, 64px);
+  aspect-ratio: 237 / 249;
+  background-image: url('./assets/ui/locker/btn_back.webp');
+}
+
+.locker-title {
+  position: absolute;
+  top: calc(var(--safe-top) + 1.2vh);
+  left: 50%;
+  width: min(58vw, 320px);
+  aspect-ratio: 647 / 222;
+  margin: 0 0 0 calc(min(58vw, 320px) / -2);
+  background: url('./assets/ui/locker/title.webp') center / contain no-repeat;
+}
+
+.locker-tabs {
+  position: absolute;
+  top: var(--lk-tabs-top);
+  left: 3vw;
+  right: 3vw;
+  height: var(--lk-tab-h);
+  display: flex;
+  gap: 2vw;
+  pointer-events: auto;
+}
+
+.locker-tab {
+  flex: 1;
+  border: none;
+  padding: 0 0 0.12em;
+  background: url('./assets/ui/locker/tab_off.webp') center / 100% 100% no-repeat;
+  font-weight: 700;
+  font-size: min(5vw, 24px);
+  letter-spacing: 0.02em;
+  color: #fff;
+  text-shadow: var(--outline);
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+
+.locker-tab.active {
+  background-image: url('./assets/ui/locker/tab_on.webp');
+}
+
+.locker-tab:active {
+  transform: scale(0.95);
+}
+
+/* Card panel, drawn like the mockup's: navy outline, glossy blue rim, light-blue fill. */
+.locker-panel {
+  position: absolute;
+  top: calc(var(--lk-tabs-top) + var(--lk-tab-h) + 1.4vh);
+  left: 2.5vw;
+  right: 2.5vw;
+  /* Reaches down to the bottom edge on every tab (so switching tabs doesn't resize it); scrolls. */
+  height: calc(100% - var(--lk-tabs-top) - var(--lk-tab-h) - 1.4vh - var(--safe-bottom) - 2.5vh);
+  display: flex;
+  border: 4px solid var(--navy);
+  border-radius: 28px;
+  background: linear-gradient(180deg, #e2f3ff 0%, #c9e6ff 100%);
+  box-shadow:
+    inset 0 0 0 5px #3d95ff,
+    inset 0 9px 0 5px rgba(255, 255, 255, 0.45),
+    0 6px 0 var(--navy),
+    0 12px 22px rgba(8, 30, 90, 0.3);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.locker-grid {
+  flex: 1;
+  margin: 2px;
+  /* Room for the equipped card's glow, which the scroll area would otherwise clip. */
+  padding: 11px 10px 12px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-content: start;
+  gap: 2.4vw;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.locker-grid::-webkit-scrollbar {
+  display: none;
+}
+
+.locker-card {
+  position: relative;
+  aspect-ratio: 325 / 367;
+  padding: 0;
+  border: none;
+  background: url('./assets/ui/locker/card.webp') center / 100% 100% no-repeat;
+  container-type: inline-size;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.locker-card:active {
+  transform: scale(0.95);
+}
+
+/* The selected frame includes its glow, so it is drawn slightly larger than the card. */
+.locker-card.selected {
+  background-image: url('./assets/ui/locker/card_selected.webp');
+  background-size: 113.54% 111.99%; /* 22px of glow around a 325x367 card */
+}
+
+.locker-card.locked {
+  background-image: url('./assets/ui/locker/card_locked.webp');
+  cursor: default;
+}
+
+.card-thumb {
+  position: absolute;
+  left: 6%;
+  top: 1.5%;
+  width: 88%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.card-thumb.pending {
+  opacity: 0;
+}
+
+.locker-card.locked .card-thumb {
+  filter: grayscale(0.55) brightness(0.8);
+  /* Smaller, and lower: the level pill sits at the top of locked cards. */
+  left: 13.65%;
+  top: 13.7%;
+  width: 72.7%;
+}
+
+.card-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* The name has its own row at the bottom, below the mallet (never over it). */
+  top: 73.5%;
+  font-weight: 700;
+  font-size: 14.5cqw;
+  line-height: 1;
+  color: #fff;
+  text-shadow: var(--outline);
+}
+
+.card-name.long {
+  font-size: 11.5cqw;
+  top: 75%;
+}
+
+.card-tag {
+  position: absolute;
+  left: 9%;
+  right: 9%;
+  top: 6%;
+  height: 16%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3%;
+  font-weight: 700;
+  font-size: 10.5cqw;
+  color: #fff;
+  text-shadow: var(--outline);
+}
+
+.card-tag.level {
+  background: url('./assets/ui/locker/pill_dark.webp') center / 100% 100% no-repeat;
+}
+
+.card-lock {
+  width: 1.05em;
+  aspect-ratio: 140 / 168;
+  background: url('./assets/ui/locker/lock.webp') center / contain no-repeat;
+}
+
+.locker-soon {
+  grid-column: 1 / -1;
+  padding: 8vh 0;
+  text-align: center;
+  font-weight: 700;
+  font-size: min(7vw, 32px);
+  color: #fff;
+  text-shadow: var(--outline);
+}
+
+/* ---------- Studio splash ---------- */
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  pointer-events: auto;
+}
+
+/* Same size and place as the logo on the native Android launch image (78% of the short side). */
+.studio-logo {
+  position: relative;
+  width: min(78vmin, 520px);
+  aspect-ratio: 820 / 732;
+  background: url('./assets/ui/studio.webp') center / contain no-repeat;
+  will-change: transform;
+}
+
+.splash-burst {
+  position: absolute;
+  left: 50%;
+  /* The mascot sits in the upper part of the logo: burst from there, in front of the logo. */
+  top: calc(50% - min(78vmin, 520px) * 0.13);
+  z-index: 1;
+  width: 0;
+  height: 0;
+}
+
+.splash-burst i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 22%;
+  border: 2px solid rgba(80, 30, 140, 0.45);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.18), inset 0 3px 0 rgba(255, 255, 255, 0.55);
+  will-change: transform, opacity;
+}
+
+/* ---------- Animations ---------- */
+@keyframes floatY {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -8px; }
+}
+@keyframes introDown {
+  from { opacity: 0; transform: translateY(-60px) scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes introUp {
+  from { opacity: 0; transform: translateY(60px) scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes breathe {
+  0%, 100% { scale: 1; }
+  50% { scale: 1.04; }
+}
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(40px) scale(0.85); }
+  to { opacity: 1; transform: none; }
+}
