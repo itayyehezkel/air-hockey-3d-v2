@@ -1,4 +1,6 @@
 import { isUnlocked } from '../game/Skins';
+import { hasFresh, isFresh } from '../game/Stats';
+import newBadgeUrl from '../assets/ui/levelup/badge_new.webp';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
@@ -9,6 +11,9 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
 export type LockerTab = 'mallets' | 'pucks' | 'tables';
 /** Tabs with items (a tab without a list yet shows "coming soon"). */
 export type LockerKind = LockerTab;
+
+/** The item kind of a tab (the save's "kind:id" keys use it). */
+const ITEM_KIND = { mallets: 'mallet', pucks: 'puck', tables: 'table' } as const;
 
 interface CardSkin {
   id: string;
@@ -58,6 +63,8 @@ export class LockerUI {
 
   render(kind: LockerKind, skins: CardSkin[], equipped: string, thumbs: Map<string, string>): void {
     this.lists[kind] = { skins, equipped, thumbs };
+    // A red dot on every tab that still has an unlocked item the player hasn't equipped.
+    for (const t of this.tabs) t.classList.toggle('has-new', hasFresh(ITEM_KIND[t.dataset.tab as LockerTab]));
     if (this.currentTab !== kind) return;
     this.grid.replaceChildren(
       ...skins.map((skin) => {
@@ -80,6 +87,15 @@ export class LockerUI {
         name.textContent = skin.name;
 
         card.append(img, name);
+        // Unlocked but never equipped: a NEW! badge (the LEVEL UP popup's), until the player equips it.
+        if (open && isFresh(`${ITEM_KIND[kind]}:${skin.id}`)) {
+          const badge = document.createElement('img');
+          badge.className = 'card-new';
+          badge.src = newBadgeUrl;
+          badge.alt = 'new';
+          badge.draggable = false;
+          card.append(badge);
+        }
         // The selected frame marks the equipped skin; only locked cards carry a tag.
         if (!open) {
           const tag = document.createElement('span');

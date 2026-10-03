@@ -1,15 +1,74 @@
+import { addCoins, addFresh, bankMatch, clearPendingLevelUp, hasFresh, homeStats, type HomeStats } from '../game/Stats';
+import { REWARDS, matchRewards, resultTitle } from '../game/Rewards';
+import { equipItem, unlockAt, unlocksBetween, type ItemKind } from '../game/Skins';
+import { ResultPopup, type ItemView } from './ResultPopup';
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
   if (!el) throw new Error(`Missing #${id}`);
   return el as T;
 };
 
-/** Stacked shadows give banner text a thick navy outline plus a drop shadow (see --outline in styles.css). */
-const BANNER_OUTLINE = [
-  [4, 4], [-4, 4], [4, -4], [-4, -4], [0, 5], [0, -5], [5, 0], [-5, 0],
-].map(([x, y]) => `${x}px ${y}px 0 #0d2f7a`).join(', ') + ', 0 9px 0 #0d2f7a, 0 14px 18px rgba(8,30,90,0.4)';
-
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Runs `fn` when the browser is idle (soon at the latest), so background work never lands in an animation frame. */
+const idle = (fn: () => void) => ('requestIdleCallback' in window ? requestIdleCallback(fn, { timeout: 2000 }) : setTimeout(fn, 200));
+
+const FONT = '"Lilita One"';
+
+/** The game's label shadow (`--label-shadow` in styles.css), as offsets in em, blur in px and colour. */
+let labelShadowList: { x: number; y: number; blur: number; color: string }[] | null = null;
+function labelShadows(): { x: number; y: number; blur: number; color: string }[] {
+  if (labelShadowList) return labelShadowList;
+  const css = getComputedStyle(document.documentElement).getPropertyValue('--label-shadow');
+  const re = /(-?[\d.]+)em\s+(-?[\d.]+)em\s+([\d.]+)px\s+(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|[a-z]+)/g;
+  labelShadowList = [...css.matchAll(re)].map((m) => ({ x: +m[1], y: +m[2], blur: +m[3], color: m[4] }));
+  return labelShadowList;
+}
+
+/**
+ * Draws a word in the game's label style into a canvas: the same shadows as `--label-shadow` (CSS paints the first
+ * one on top, so they go in reverse), then the fill. Each shadow is cast by a glyph drawn far off the canvas, so
+ * only the shadow lands (otherwise later shadows would cover the earlier fills).
+ */
+function drawLabel(text: string, color: string, size: number): HTMLCanvasElement {
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  const c = document.createElement('canvas');
+  const g = c.getContext('2d')!;
+  const setFont = () => {
+    g.font = `400 ${size}px ${FONT}`;
+    (g as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${0.02 * size}px`;
+  };
+  setFont();
+  const width = g.measureText(text).width;
+  const pad = size * 0.2; // room for the outline and the depth edge below
+  const cssW = Math.ceil(width + pad * 2);
+  const cssH = Math.ceil(size * 1.15 + pad * 1.5);
+  c.width = Math.round(cssW * dpr);
+  c.height = Math.round(cssH * dpr);
+  c.style.width = `${cssW}px`;
+  c.style.height = `${cssH}px`;
+  c.className = 'banner-art';
+  g.scale(dpr, dpr);
+  setFont(); // resizing the canvas reset it
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  const x = cssW / 2;
+  const y = pad * 0.6 + (size * 1.15) / 2;
+  const off = cssW + 2000;
+  g.fillStyle = '#000';
+  for (const sh of [...labelShadows()].reverse()) {
+    // Shadow offsets and blur are in device pixels (the canvas scale doesn't apply to them).
+    g.shadowColor = sh.color;
+    g.shadowBlur = sh.blur * dpr;
+    g.shadowOffsetX = (sh.x * size + off) * dpr;
+    g.shadowOffsetY = sh.y * size * dpr;
+    g.fillText(text, x - off, y);
+  }
+  g.shadowColor = 'transparent';
+  g.fillStyle = color;
+  g.fillText(text, x, y);
+  return c;
+}
 
 /** Thin wrapper around the DOM overlay screens. */
 export class UI {
@@ -28,6 +87,15 @@ export class UI {
   private readonly soundToggle = $<HTMLInputElement>('soundToggle');
   private readonly vibrationToggle = $<HTMLInputElement>('vibrationToggle');
   private bannerAnim: Animation | null = null;
+  private readonly resultPopup = new ResultPopup(this.result, {
+    onStar: (i) => this.onStar(i),
+    onTap: () => this.onButton(),
+    onCoin: (i) => this.onCoin(i),
+    onStarLand: (i) => this.onStarLand(i),
+    onTick: (step) => this.onTick(step),
+    onBeat: (beat, mode) => this.onBeat(beat, mode),
+    setStat: (el, text) => this.setStat(el, text),
+  });
 
   onPlay: () => void = () => {};
   onAgain: () => void = () => {};
@@ -39,6 +107,24 @@ export class UI {
   onLocker: () => void = () => {};
   onLockerBack: () => void = () => {};
   onButton: () => void = () => {};
+  /** A result-popup star lands (sound). */
+  onStar: (i: number) => void = () => {};
+  /** A flying coin lands in the result popup's counter (sound). */
+  onCoin: (i: number) => void = () => {};
+  /** A flying star lands in the result popup's star counter (sound). */
+  onStarLand: (i: number) => void = () => {};
+  /** The result popup's score count-up ticks (sound). */
+  onTick: (step: number) => void = () => {};
+  /** Result-popup haptic beats (popup lands, emblem lands, ad reward granted). */
+  onBeat: (beat: 'enter' | 'emblem' | 'reward', mode: 'win' | 'lose') => void = () => {};
+  /** KEEP PLAYING! on a loss (after the ad): the match cancels the opponent's winning goal and resumes. */
+  onKeepPlaying: () => void = () => {};
+  /** Plays a rewarded ad; resolves true if the reward was earned. */
+  onWatchAd: () => Promise<boolean> = async () => true;
+  /** Prepares a spinning 3D view of a Locker item (`px` = its size in CSS pixels), for the LEVEL UP popup. */
+  onItemView: (kind: ItemKind, id: string, px: number) => Promise<ItemView> = () => Promise.reject(new Error('no item view'));
+  /** The LEVEL UP popup opens (fanfare). */
+  onLevelUp: () => void = () => {};
   onSettingsChange: (s: { sound: boolean; vibration: boolean }) => void = () => {};
 
   constructor() {
@@ -89,6 +175,7 @@ export class UI {
     };
     this.soundToggle.addEventListener('change', changed);
     this.vibrationToggle.addEventListener('change', changed);
+    this.prepareBanners();
   }
 
   setSettings(s: { sound: boolean; vibration: boolean }): void {
@@ -110,13 +197,18 @@ export class UI {
    * Fades out, runs the swap, then fades back in. If the swap returns a promise (the new screen
    * still loading), the fade waits for it, up to 1.5 s, so nothing half-built is ever shown.
    */
-  transition(swap: () => void | Promise<unknown>): void {
+  transition(swap: () => void | Promise<unknown>, onShown?: () => void): void {
     this.fadeEl.classList.remove('clear');
     setTimeout(() => {
       const loading = swap();
       const limit = new Promise((resolve) => setTimeout(resolve, 1500));
       Promise.race([Promise.resolve(loading).catch(() => {}), limit]).then(() =>
-        requestAnimationFrame(() => requestAnimationFrame(() => this.fadeEl.classList.add('clear'))),
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            this.fadeEl.classList.add('clear');
+            onShown?.(); // the new screen starts fading in now
+          }),
+        ),
       );
     }, 350);
   }
@@ -209,12 +301,48 @@ export class UI {
     this.lockerStage.classList.remove('hidden');
   }
 
+  /** Updates the Home counters and the live level text under PLAY. */
+  setHomeStats(stats: HomeStats): void {
+    this.setStat($('coinCount'), stats.coins.toLocaleString('en-US'));
+    // Every star ever earned (it never drops on a level-up); the stars needed for the next level will go in a tooltip
+    // on the counter later.
+    this.setStat($('starCount'), String(stats.totalStars));
+    $('playLevel').textContent = `LEVEL ${stats.level}`;
+    this.updateLockerDot();
+  }
+
+  /** The red dot on the Home Locker button: an unlocked item hasn't been equipped yet. */
+  updateLockerDot(): void {
+    $('lockerBtn').classList.toggle('has-new', hasFresh());
+  }
+
+  /** Sets a pill's number. The pill grows with it (see .stat-pill); past its max length the text shrinks (to 50%). */
+  private setStat(el: HTMLElement, text: string): void {
+    el.textContent = text;
+    // Short numbers (up to 3 digits) are drawn bigger, in a shorter pill.
+    const short = text.length <= 3;
+    el.style.setProperty('--num-scale', short ? '1.25' : '1');
+    el.parentElement!.classList.toggle('short', short);
+    this.fitStat(el);
+  }
+
+  /** Shrinks a number that does not fit its pill's max length. Needs layout, so Home runs it again when shown. */
+  private fitStat(el: HTMLElement): void {
+    el.style.fontSize = '';
+    const pill = el.parentElement!;
+    const style = getComputedStyle(pill);
+    const room = pill.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    if (room > 0 && el.offsetWidth > room) el.style.fontSize = `calc(var(--pill-h) * ${0.4 * Number(el.style.getPropertyValue('--num-scale')) * Math.max(0.5, room / el.offsetWidth)})`;
+  }
+
   showHome(): void {
     this.locker.classList.add('hidden');
     this.lockerStage.classList.add('hidden');
     this.home.classList.remove('hidden');
+    this.fitStat($('coinCount'));
+    this.fitStat($('starCount'));
     this.hud.classList.add('hidden');
-    this.result.classList.add('hidden');
+    this.hideResult();
     this.pauseMenu.classList.add('hidden');
     this.settingsMenu.classList.add('hidden');
   }
@@ -224,11 +352,54 @@ export class UI {
     this.lockerStage.classList.add('hidden');
     this.home.classList.add('hidden');
     this.hud.classList.remove('hidden');
-    this.result.classList.add('hidden');
+    this.hideResult();
     this.pauseMenu.classList.add('hidden');
     this.settingsMenu.classList.add('hidden');
     this.pauseBtn.classList.remove('hidden');
     this.setScore(0, 0);
+  }
+
+  /** Slides up the free-booster offer; resolves true for GET IT, false for No thanks. */
+  offerBooster(): Promise<boolean> {
+    const modal = $('boosterOffer');
+    this.hideResult(); // from "Play again", it takes the result's place
+    modal.classList.remove('hidden', 'closing');
+    return new Promise((resolve) => {
+      const choose = (take: boolean) => () => {
+        get.removeEventListener('click', onGet);
+        skip.removeEventListener('click', onSkip);
+        this.onButton();
+        modal.classList.add('closing');
+        setTimeout(() => modal.classList.add('hidden'), 200);
+        resolve(take);
+      };
+      const get = $('boosterGetBtn');
+      const skip = $('boosterSkipBtn');
+      const onGet = choose(true);
+      const onSkip = choose(false);
+      get.addEventListener('click', onGet);
+      skip.addEventListener('click', onSkip);
+    });
+  }
+
+  /** Match start: the score bar drops in with a bounce and the pause button pops in after it. */
+  playMatchIntro(): void {
+    const bar = this.hud.querySelector<HTMLElement>('.score-bar')!;
+    bar.animate(
+      [
+        { transform: 'translateY(-160%)' },
+        { transform: 'translateY(12%)', offset: 0.6 },
+        { transform: 'translateY(-4%)', offset: 0.82 },
+        { transform: 'translateY(0)' },
+      ],
+      { duration: 650, delay: 300, easing: 'cubic-bezier(0.3, 0.7, 0.4, 1)', fill: 'backwards' },
+    );
+    this.pauseBtn.animate([{ transform: 'scale(0)' }, { transform: 'scale(1.15)', offset: 0.6 }, { transform: 'scale(1)' }], {
+      duration: 450,
+      delay: 550,
+      easing: 'ease-out',
+      fill: 'backwards',
+    });
   }
 
   showPause(show: boolean): void {
@@ -250,15 +421,50 @@ export class UI {
         duration: 600,
         easing: 'cubic-bezier(0.2, 1.6, 0.4, 1)',
       });
+      // The whole bar punches too, tilting toward the side that scored.
+      const tilt = bump === 'player' ? 4 : -4;
+      el.parentElement!.animate(
+        [{ scale: '1', rotate: '0deg' }, { scale: '1.1', rotate: `${tilt}deg`, offset: 0.3 }, { scale: '0.97', rotate: `${-tilt / 2}deg`, offset: 0.6 }, { scale: '1', rotate: '0deg' }],
+        { duration: 550, easing: 'ease-out' },
+      );
     }
+  }
+
+  /**
+   * The banner words drawn once into images (the game's label style: white Lilita One with the navy shadow outline).
+   * As live text, each new word made the browser paint 36 soft shadows on huge letters in one frame: a 50-130 ms
+   * freeze on "GO!" and on goals (measured). A finished image only moves and scales, which costs nothing.
+   */
+  private readonly bannerArt = new Map<string, HTMLCanvasElement>();
+
+  /** Draws the match banners ahead of time, while the Home screen idles. */
+  private prepareBanners(): void {
+    const words: [string, string][] = [['3', '#ffffff'], ['2', '#ffffff'], ['1', '#ffffff'], ['GO!', '#ffd21f'], ['GOAL!', '#4fa3ff'], ['GOAL!', '#ff4a55']];
+    const next = () => {
+      const w = words.shift();
+      if (!w) return;
+      this.bannerImage(w[0], w[1]);
+      idle(next);
+    };
+    document.fonts.load(`140px ${FONT}`).then(() => idle(next), () => {});
+  }
+
+  /** The banner word as an image (cached per word, colour and size). */
+  private bannerImage(text: string, color: string): HTMLCanvasElement {
+    const size = Math.round(Math.min(140, Math.max(72, innerWidth * 0.24))); // .banner font-size
+    const key = `${text}|${color}|${size}`;
+    let art = this.bannerArt.get(key);
+    if (art) return art;
+    art = drawLabel(text, color, size);
+    this.bannerArt.set(key, art);
+    return art;
   }
 
   showBanner(text: string, color: string, kind: 'show' | 'count' = 'show'): void {
     const b = this.banner;
     this.bannerAnim?.cancel();
-    b.textContent = text;
-    b.style.color = color;
-    b.style.textShadow = BANNER_OUTLINE;
+    b.replaceChildren(this.bannerImage(text, color));
+    b.setAttribute('aria-label', text);
     const at = (opacity: number, scale: number, offset?: number) => ({ opacity, transform: `translateY(-50%) scale(${scale})`, offset });
     this.bannerAnim =
       kind === 'show'
@@ -266,12 +472,145 @@ export class UI {
         : b.animate([at(0, 2), at(1, 1, 0.25), at(0, 0.7)], { duration: 750, easing: 'ease-out', fill: 'both' });
   }
 
-  showResult(win: boolean, player: number, ai: number): void {
+  /** @param canContinue a loss may offer KEEP PLAYING! (once per match). */
+  showResult(win: boolean, player: number, ai: number, canContinue = false): void {
     $('finalPlayer').textContent = String(player);
     $('finalAi').textContent = String(ai);
     this.pauseBtn.classList.add('hidden');
     this.pauseMenu.classList.add('hidden');
+    // The popup shows the score itself (and the win popup's coin counter sits where the match score bar ends).
+    this.hud.classList.add('hidden');
     this.result.classList.remove('hidden', 'win', 'lose');
     this.result.classList.add(win ? 'win' : 'lose');
+    void this.runResultPopup(win, player, ai, canContinue);
   }
+
+  /** After KEEP PLAYING!: back to the match with the corrected score. */
+  resumeMatch(player: number, ai: number): void {
+    this.hideResult();
+    this.hud.classList.remove('hidden');
+    this.pauseBtn.classList.remove('hidden');
+    this.setScore(player, ai);
+  }
+
+  private hideResult(): void {
+    this.result.classList.add('hidden');
+    this.resultPopup.clear();
+  }
+
+  private async runResultPopup(win: boolean, player: number, ai: number, canContinue: boolean): Promise<void> {
+    const { stars, coins } = matchRewards(win, ai);
+    const before = homeStats();
+    // The match is banked (and saved) right away, so closing the app on this popup loses nothing; KEEP PLAYING! undoes
+    // it (the match then counts at its real end). A level-up is saved as "unseen" until its popup has been shown.
+    const banked = bankMatch(stars, coins, win, win && ai === 0);
+    if (banked.up) addFresh(unlocksBetween(before.level, banked.up.to));
+    // On a level-up, the unlocked item's 3D view is loaded while the popup plays (a little later, so loading the model
+    // doesn't stutter the popup's entry), ready for the LEVEL UP popup.
+    const next = banked.up ? unlockAt(banked.up.to) : null;
+    let view = null as Promise<ItemView | null> | null; // (a cast: it is only set inside prepareView)
+    // The view's size: the item box is 64% of the popup card's width (see .rp-card / .rp-unlock-item).
+    const viewPx = () => Math.min(innerWidth - 12, 460, innerHeight * 0.58) * 0.64;
+    const prepareView = (item: { kind: ItemKind; id: string }) =>
+      (view ??= this.onItemView(item.kind, item.id, viewPx()).catch((e) => (console.warn('Item view failed', e), null)));
+    const prerender = next ? window.setTimeout(() => prepareView(next), 3500) : 0;
+    let choice = await this.resultPopup.show(
+      win
+        ? {
+            mode: 'win',
+            title: resultTitle(true, player, ai),
+            stars,
+            coins,
+            wallet: before.coins,
+            starWallet: before.totalStars,
+            buttons: [
+              { id: 'x3', color: 'gold', icon: 'video', text: `x${REWARDS.adMultiplier} COINS`, shine: true },
+              { id: 'home', color: 'blue', icon: 'home', text: 'HOME', iconOnly: true },
+              { id: 'next', color: 'green', text: 'CONTINUE', breathe: true },
+            ],
+          }
+        : {
+            mode: 'lose',
+            title: resultTitle(false, player, ai),
+            stars,
+            coins,
+            wallet: before.coins,
+            starWallet: before.totalStars,
+            buttons: [
+              ...(canContinue ? [{ id: 'keep', color: 'gold', icon: 'video', text: 'KEEP PLAYING!', shine: true } as const] : []),
+              { id: 'home', color: 'blue', icon: 'home', text: 'HOME', iconOnly: true },
+              { id: 'next', color: 'green', text: 'PLAY AGAIN' },
+            ],
+          },
+    );
+    // The ad buttons keep the popup open until the ad is done.
+    while (choice === 'x3' || choice === 'keep') {
+      if (choice === 'x3') {
+        this.resultPopup.disableButton('x3');
+        if (await this.onWatchAd()) {
+          this.resultPopup.multiplyCoins(REWARDS.adMultiplier);
+          addCoins(coins * (REWARDS.adMultiplier - 1));
+        }
+      } else if (await this.onWatchAd()) {
+        clearTimeout(prerender);
+        void view?.then((v) => v?.dispose()); // no level-up yet: drop the prepared view
+        banked.undo(); // the match goes on: it counts at its real end
+        this.onKeepPlaying();
+        return;
+      }
+      choice = await this.resultPopup.next();
+    }
+    clearTimeout(prerender);
+    // A full star bar shows the LEVEL UP popup first.
+    // (Then it goes where the result popup's button pointed: the next match or Home.)
+    if (banked.up) await this.runLevelUp(banked.up, prepareView);
+    else void view?.then((v) => v?.dispose());
+    if (choice === 'next') this.onAgain();
+    else if (choice === 'home') this.onBack();
+  }
+
+  /**
+   * A level-up the player never saw (the app closed before its popup): shown over Home on the next launch. EQUIP
+   * equips the item, CONTINUE just closes it; both stay on Home.
+   */
+  async showPendingLevelUp(up: { from: number; to: number }): Promise<void> {
+    this.result.classList.remove('hidden', 'win', 'lose');
+    const viewPx = Math.min(innerWidth - 12, 460, innerHeight * 0.58) * 0.64;
+    let view = null as Promise<ItemView | null> | null;
+    const prepareView = (item: { kind: ItemKind; id: string }) =>
+      (view ??= this.onItemView(item.kind, item.id, viewPx).catch((e) => (console.warn('Item view failed', e), null)));
+    await this.runLevelUp(up, prepareView);
+    this.hideResult();
+    this.updateLockerDot();
+  }
+
+  /**
+   * LEVEL UP popup (after the result popup's CONTINUE / PLAY AGAIN / HOME, or on launch). EQUIP equips the new item and
+   * goes on; CONTINUE goes on. "Goes on" = what the result popup's button chose (next match or Home); on launch
+   * it stays on Home. Once a button is tapped, the level-up counts as seen.
+   */
+  private async runLevelUp(
+    up: { from: number; to: number },
+    prepareView: (item: { kind: ItemKind; id: string }) => Promise<ItemView | null>,
+  ): Promise<void> {
+    const item = unlockAt(up.to);
+    // Wait for the item's 3D view (usually ready already), but never more than a few seconds.
+    const pending = item ? prepareView(item) : null;
+    const view = pending ? await Promise.race([pending, wait(4000).then(() => null)]) : null;
+    if (pending && !view) void pending.then((v) => v?.dispose()); // too late: drop it when it arrives
+    this.onLevelUp();
+    const choice = await this.resultPopup.showLevelUp({
+      from: up.from,
+      level: up.to,
+      item: item ? { name: item.name, view } : null,
+      // No HOME button here (user, 2026-10-03): EQUIP or CONTINUE (one short word keeps the labels big).
+      buttons: [
+        ...(item ? [{ id: 'equip', color: 'green', text: 'EQUIP', breathe: true } as const] : []),
+        { id: 'next', color: item ? 'blue' : 'green', text: 'CONTINUE', breathe: !item },
+      ],
+    });
+    clearPendingLevelUp();
+    if (choice === 'equip' && item) equipItem(item.kind, item.id);
+  }
+
 }

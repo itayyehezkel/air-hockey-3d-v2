@@ -1,11 +1,52 @@
 :root {
   --navy: #0d2f7a;
   --navy-deep: #0a2362;
-  --font: 'Fredoka', system-ui, sans-serif;
+  /* One font for the whole game: Lilita One, chunky like the Scenario-painted words. */
+  --font: 'Lilita One', system-ui, sans-serif;
+  --font-label: var(--font);
   /* Capacitor injects --safe-area-inset-* on Android WebViews where env() isn't reliable. */
   --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   /* Thick navy outline for white UI text (stacked shadows keep the glyphs intact). */
+  /* The game's label style (popup buttons, LEVEL under PLAY, Locker): a gentle navy outline made of soft shadows set a
+     little lower, plus a navy depth edge. In em, so it scales with each text. */
+  --label-shadow:
+    0.085em 0.025em 0.5px var(--navy),
+    0.082em 0.047em 0.5px var(--navy),
+    0.074em 0.068em 0.5px var(--navy),
+    0.060em 0.085em 0.5px var(--navy),
+    0.043em 0.099em 0.5px var(--navy),
+    0.022em 0.107em 0.5px var(--navy),
+    0.000em 0.110em 0.5px var(--navy),
+    -0.022em 0.107em 0.5px var(--navy),
+    -0.042em 0.099em 0.5px var(--navy),
+    -0.060em 0.085em 0.5px var(--navy),
+    -0.074em 0.068em 0.5px var(--navy),
+    -0.082em 0.047em 0.5px var(--navy),
+    -0.085em 0.025em 0.5px var(--navy),
+    -0.082em 0.003em 0.5px var(--navy),
+    -0.074em -0.017em 0.5px var(--navy),
+    -0.060em -0.035em 0.5px var(--navy),
+    -0.043em -0.049em 0.5px var(--navy),
+    -0.022em -0.057em 0.5px var(--navy),
+    -0.000em -0.060em 0.5px var(--navy),
+    0.022em -0.057em 0.5px var(--navy),
+    0.043em -0.049em 0.5px var(--navy),
+    0.060em -0.035em 0.5px var(--navy),
+    0.074em -0.018em 0.5px var(--navy),
+    0.082em 0.003em 0.5px var(--navy),
+    0.085em 0.075em 0.5px var(--navy-deep),
+    0.074em 0.118em 0.5px var(--navy-deep),
+    0.043em 0.149em 0.5px var(--navy-deep),
+    0.000em 0.160em 0.5px var(--navy-deep),
+    -0.042em 0.149em 0.5px var(--navy-deep),
+    -0.074em 0.118em 0.5px var(--navy-deep),
+    -0.085em 0.075em 0.5px var(--navy-deep),
+    -0.074em 0.033em 0.5px var(--navy-deep),
+    -0.043em 0.001em 0.5px var(--navy-deep),
+    -0.000em -0.010em 0.5px var(--navy-deep),
+    0.043em 0.001em 0.5px var(--navy-deep),
+    0.074em 0.032em 0.5px var(--navy-deep);
   --outline:
     2px 2px 0 var(--navy), -2px 2px 0 var(--navy), 2px -2px 0 var(--navy), -2px -2px 0 var(--navy),
     0 2.5px 0 var(--navy), 0 -2.5px 0 var(--navy), 2.5px 0 0 var(--navy), -2.5px 0 0 var(--navy),
@@ -32,6 +73,8 @@ body {
   overflow: hidden;
   background: #2a8cf5;
   font-family: var(--font);
+  /* Lilita One has a single (already heavy) weight: never fake a bold version of it for font-weight: 700. */
+  font-synthesis: none;
   color: #fff;
   overscroll-behavior: none;
 }
@@ -95,15 +138,9 @@ button {
   transform: translate(-50%, -50%);
   font-weight: 700;
   line-height: 1;
+  /* the game's label style (see --label-shadow) */
   color: #fff;
-  background: linear-gradient(180deg, #ffffff 55%, #dce8f7 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter:
-    drop-shadow(0.035em 0 0 var(--navy)) drop-shadow(-0.035em 0 0 var(--navy))
-    drop-shadow(0 0.035em 0 var(--navy)) drop-shadow(0 -0.035em 0 var(--navy))
-    drop-shadow(0 0.06em 0 var(--navy-deep));
+  text-shadow: var(--label-shadow);
   pointer-events: none;
 }
 
@@ -135,13 +172,145 @@ button {
 }
 
 .play-btn {
-  bottom: calc(var(--safe-bottom) + 9vh);
+  --play-w: min(62vw, 350px);
+  bottom: calc(var(--safe-bottom) + 8vh);
   left: 50%;
-  width: min(56vw, 320px);
-  aspect-ratio: 570 / 281;
-  margin-left: calc(min(56vw, 320px) / -2);
-  background-image: url('./assets/ui/play.webp');
+  width: var(--play-w);
+  aspect-ratio: 880 / 425;
+  margin-left: calc(var(--play-w) / -2);
+  background-image: url('./assets/ui/home/play.webp');
+  container-type: inline-size;
   animation: introUp 0.7s 0.45s cubic-bezier(0.2, 1.3, 0.3, 1) backwards, breathe 1.6s 1.2s ease-in-out infinite;
+}
+
+/* The live second line, in the empty strip under the baked "PLAY": same look as PLAY (white bubbly
+   letters with a light-blue shade and a thick navy outline), just smaller. */
+.play-sub {
+  left: 50%;
+  top: 70%;
+  font-size: 8.5cqw;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  /* the popup button-label style: solid white, a gentle navy shadow outline set a little lower + a navy depth edge */
+  background: none;
+  -webkit-text-fill-color: #fff;
+  color: #fff;
+  filter: none;
+  text-shadow:
+    0.085em 0.025em 0.5px var(--navy),
+    0.082em 0.047em 0.5px var(--navy),
+    0.074em 0.068em 0.5px var(--navy),
+    0.060em 0.085em 0.5px var(--navy),
+    0.043em 0.099em 0.5px var(--navy),
+    0.022em 0.107em 0.5px var(--navy),
+    0.000em 0.110em 0.5px var(--navy),
+    -0.022em 0.107em 0.5px var(--navy),
+    -0.042em 0.099em 0.5px var(--navy),
+    -0.060em 0.085em 0.5px var(--navy),
+    -0.074em 0.068em 0.5px var(--navy),
+    -0.082em 0.047em 0.5px var(--navy),
+    -0.085em 0.025em 0.5px var(--navy),
+    -0.082em 0.003em 0.5px var(--navy),
+    -0.074em -0.017em 0.5px var(--navy),
+    -0.060em -0.035em 0.5px var(--navy),
+    -0.043em -0.049em 0.5px var(--navy),
+    -0.022em -0.057em 0.5px var(--navy),
+    -0.000em -0.060em 0.5px var(--navy),
+    0.022em -0.057em 0.5px var(--navy),
+    0.043em -0.049em 0.5px var(--navy),
+    0.060em -0.035em 0.5px var(--navy),
+    0.074em -0.018em 0.5px var(--navy),
+    0.082em 0.003em 0.5px var(--navy),
+    0.085em 0.075em 0.5px var(--navy-deep),
+    0.074em 0.118em 0.5px var(--navy-deep),
+    0.043em 0.149em 0.5px var(--navy-deep),
+    0.000em 0.160em 0.5px var(--navy-deep),
+    -0.042em 0.149em 0.5px var(--navy-deep),
+    -0.074em 0.118em 0.5px var(--navy-deep),
+    -0.085em 0.075em 0.5px var(--navy-deep),
+    -0.074em 0.033em 0.5px var(--navy-deep),
+    -0.043em 0.001em 0.5px var(--navy-deep),
+    -0.000em -0.010em 0.5px var(--navy-deep),
+    0.043em 0.001em 0.5px var(--navy-deep),
+    0.074em 0.032em 0.5px var(--navy-deep);
+}
+
+/* Coin and star counters, top right. Each pill is a 3-slice sprite (icon cap | stretchy bar | end cap, via
+   border-image), so its width follows the number inside it between a min and a max; the bar is right-aligned
+   and the coin pill sits to the left of the star pill. Caps are measured in sprite pixels (--cap-l / --cap-r,
+   sprite height --img-h) and scaled to the pill height. */
+.stat-bar {
+  --pill-h: calc(min(21vw, 96px) * 184 / 476);
+  position: absolute;
+  right: 3vw;
+  /* Vertically centred on the gear button (same top, offset by half the height difference). */
+  top: calc(var(--safe-top) + 1.6vh + (min(14vw, 64px) - var(--pill-h)) / 2);
+  display: flex;
+  align-items: center;
+  gap: 1.5vw;
+  pointer-events: none;
+}
+
+.stat-pill {
+  --cap-l-px: calc(var(--cap-l) * var(--pill-h) / var(--img-h));
+  --cap-r-px: calc(var(--cap-r) * var(--pill-h) / var(--img-h));
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--pill-h);
+  /* --bar-cy: the dark bar's vertical centre in the sprite (0-1). Sprites differ by a pixel or two, so the pill is
+     moved to put its bar on the row's centre line; the number is moved back onto the bar. */
+  position: relative;
+  top: calc(var(--pill-h) * (0.5 - var(--bar-cy)));
+  border-style: solid;
+  border-width: 0 var(--cap-r-px) 0 var(--cap-l-px);
+  border-image: var(--sprite) 0 var(--cap-r) 0 var(--cap-l) fill / 0 var(--cap-r-px) 0 var(--cap-l-px) stretch;
+  /* --pad: space each side of the number, in pill heights; short numbers (.short, up to 3 digits) get a shorter pill. */
+  --pad: 0.4;
+  /* --shift (sprite px) moves the text centre onto the dark bar's centre, which the cap slices do not quite match. */
+  padding: 0 calc(var(--pill-h) * var(--pad)) 0 calc(var(--pill-h) * var(--pad) + 2 * var(--shift) * var(--pill-h) / var(--img-h));
+  /* Bar length (excluding the caps) runs from --bar-min to --bar-max pill heights. */
+  min-width: calc(var(--cap-l-px) + var(--cap-r-px) + var(--pill-h) * var(--bar-min));
+  max-width: calc(var(--cap-l-px) + var(--cap-r-px) + var(--pill-h) * var(--bar-max));
+  white-space: nowrap;
+}
+
+.stat-pill.short {
+  --pad: 0.15;
+}
+
+.star-pill {
+  --sprite: url('./assets/ui/home/star_pill.webp');
+  --img-h: 219;
+  --cap-l: 260;
+  --shift: -7.5;
+  --bar-cy: 0.518;
+  --cap-r: 120;
+  --bar-min: 0.6;
+  --bar-max: 1.9;
+  animation: popIn 0.5s 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+.coin-pill {
+  --sprite: url('./assets/ui/home/coin_pill.webp');
+  --img-h: 222;
+  --cap-l: 250;
+  --shift: -6;
+  --bar-cy: 0.489;
+  --cap-r: 120;
+  --bar-min: 0.9;
+  --bar-max: 3.6;
+  animation: popIn 0.5s 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
+}
+
+.stat-num {
+  position: static;
+  transform: none;
+  font-size: calc(var(--pill-h) * 0.4 * var(--num-scale, 1));
+  padding-bottom: 0.14em;
+  position: relative;
+  top: calc(var(--pill-h) * (var(--bar-cy) - 0.5));
 }
 
 /* ---------- HUD (positions from the game mockup) ---------- */
@@ -202,6 +371,11 @@ button {
   color: #fff;
   will-change: transform, opacity;
 }
+/* The banner word is a pre-drawn image (UI.bannerImage): animating it never repaints the text. */
+.banner-art {
+  display: block;
+  margin: 0 auto;
+}
 
 /* ---------- Popups ---------- */
 .modal {
@@ -236,6 +410,45 @@ button {
   background-image: url('./assets/ui/settingspanel.webp');
 }
 
+/* The booster offer slides up from the bottom instead of popping in the middle. */
+.booster-modal {
+  align-items: flex-end;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+.booster-popup {
+  width: min(96vw, 460px);
+  aspect-ratio: 1006 / 1121;
+  background-image: url('./assets/ui/boosterpanel.webp');
+  animation: slideUp 0.45s cubic-bezier(0.2, 1.15, 0.3, 1) both;
+}
+
+.booster-modal.closing {
+  animation: fadeOut 0.2s ease both;
+}
+
+.booster-modal.closing .booster-popup {
+  animation: slideDown 0.2s ease-in both;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(110%);
+  }
+}
+
+@keyframes slideDown {
+  to {
+    transform: translateY(110%);
+  }
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+  }
+}
+
 .result-popup {
   width: min(92vw, 440px);
   aspect-ratio: 900 / 1297;
@@ -264,6 +477,695 @@ button {
 }
 
 /* Transparent hit area over a button painted in the sprite; darkens while pressed. */
+/* ---------- Result popup (built by src/ui/ResultPopup.ts from the parts in assets/ui/result) ----------
+   Sizes are in cqw of the card, so the whole popup scales as one. Wins and losses share it. */
+#result {
+  padding: 6px; /* the popup's ribbon reaches close to the screen edges on phones */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  /* Calm, even backdrop over the frozen table: a deep-blue dim, darker toward the edges (a soft vignette), so the
+     busy table recedes and the popup stands out. Static, so it costs nothing per frame. */
+  background:
+    radial-gradient(ellipse 75% 60% at 50% 48%, rgba(8, 30, 95, 0.55), rgba(5, 18, 62, 0.88) 100%);
+}
+/* The old sprite popup (winpanel/losepanel) is replaced by the built popup for both results. */
+#result .result-popup {
+  display: none;
+}
+
+.rp-confetti {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.rp-card {
+  position: relative;
+  top: 4vh; /* a little below the screen's centre: the trophy and rays get more room above */
+  width: min(100vw - 12px, 460px, 58vh);
+  container-type: inline-size;
+}
+
+.rp-trophy,
+.rp-ribbon,
+.rp-title,
+.rp-star,
+.rp-star img,
+.rp-score,
+.rp-coins,
+.rp-btn {
+  will-change: transform;
+}
+
+.rp-card img {
+  display: block;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Light rays spinning behind the trophy. */
+.rp-rays {
+  position: absolute;
+  left: 50%;
+  top: 16cqw;
+  width: 150cqw;
+  height: 150cqw;
+  margin: -75cqw 0 0 -75cqw;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.rp-card .rp-rays {
+  animation: rpSpin 16s linear infinite, rpPulse 2.4s ease-in-out infinite;
+}
+.rp-win .rp-rays {
+  animation: rpSpin 16s linear infinite, rpRaysTada 4.5s ease-in-out 1.1s infinite;
+}
+
+.rp-panel {
+  position: relative;
+  width: 92cqw;
+  /* Room above the panel for the trophy and stars. This must be on a child of .rp-card: cqw on the card itself
+     would measure the screen, not the card, and the panel would slide against the ribbon as the screen changes. */
+  margin: 39cqw auto 0;
+  box-sizing: border-box;
+  /* 9-slice frame: corners fixed, sides stretch, so the panel grows with its content. */
+  border: 4cqw solid transparent;
+  border-image: url('./assets/ui/result/panel.webp') 110 fill / 14cqw stretch;
+  padding: 8cqw 4cqw 6cqw; /* room under the buttons */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.6cqw;
+  z-index: 1;
+}
+
+/* The worried character on a loss: bobs and tilts a little; its sweat drop wiggles. */
+.rp-worried {
+  position: absolute;
+  left: 50%;
+  top: 0.5cqw; /* sized from its base (the base stays behind the stars and the ribbon) */
+  width: 44cqw;
+  transform: translateX(-50%);
+  z-index: 2;
+  animation: rpBob 2.4s ease-in-out infinite;
+  will-change: transform;
+}
+.rp-worried-art {
+  width: 100%;
+}
+/* Positioned on the puck (it is a child of .rp-worried, so it bobs and tilts with it). */
+.rp-sweat {
+  position: absolute;
+  left: 80%;
+  top: 2.5cqw;
+  width: 7cqw;
+  z-index: 3;
+  animation: rpSweat 1.8s ease-in-out infinite;
+  will-change: transform;
+}
+@keyframes rpBob {
+  0%, 100% { translate: 0 0; rotate: -3deg; }
+  50% { translate: 0 -1.6cqw; rotate: 3deg; }
+}
+@keyframes rpSweat {
+  0%, 60%, 100% { translate: 0 0; scale: 1; }
+  70% { translate: 0 0.8cqw; scale: 1.1 0.9; }
+  85% { translate: 0 -0.4cqw; scale: 0.95 1.05; }
+}
+
+.rp-trophy {
+  position: absolute;
+  left: 50%;
+  top: -4cqw; /* sized from its base: the base stays hidden behind the ribbon */
+  width: 48cqw;
+  transform: translateX(-50%);
+  z-index: 2;
+  /* After the entry pop: a gentle float with a "ta-da" punch + wiggle every few seconds (individual transform
+     properties, so they combine with the entry animation's transform). */
+  animation: rpTrophyIdle 4.5s ease-in-out 1.1s infinite;
+  will-change: transform;
+}
+.rp-trophy-art {
+  width: 100%;
+  filter: drop-shadow(0 1.2cqw 1.6cqw rgba(10, 40, 120, 0.35));
+}
+/* The shine: a light streak clipped to the trophy's own shape, sweeping across in time with the "ta-da". */
+.rp-trophy-shine {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  -webkit-mask: url('./assets/ui/result/trophy.webp') center / 100% 100% no-repeat;
+  mask: url('./assets/ui/result/trophy.webp') center / 100% 100% no-repeat;
+  pointer-events: none;
+}
+.rp-trophy-shine::before {
+  content: '';
+  position: absolute;
+  top: -20%;
+  left: 0;
+  width: 46%;
+  height: 140%;
+  /* bright core with soft edges, so it reads clearly on the gold */
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.7) 35%, #fff 50%, rgba(255, 255, 255, 0.7) 65%, rgba(255, 255, 255, 0) 100%);
+  rotate: 18deg;
+  translate: -150% 0;
+  animation: rpTrophyShine 4.5s ease-in-out 1.1s infinite;
+  will-change: translate;
+}
+/* 4.5 s cycle: float for ~3.4 s, then a ~0.8 s "ta-da" (the shine and the rays' flare land on it too). */
+@keyframes rpTrophyIdle {
+  0%, 100% { translate: 0 0; scale: 1; rotate: 0deg; }
+  25% { translate: 0 -1.4cqw; scale: 1; rotate: 0deg; }
+  50% { translate: 0 0; scale: 1; rotate: 0deg; }
+  68% { translate: 0 -1.4cqw; scale: 1; rotate: 0deg; }
+  76% { translate: 0 0; scale: 1; rotate: 0deg; }
+  81% { translate: 0 -2cqw; scale: 1.12; rotate: -7deg; }
+  86% { translate: 0 -2cqw; scale: 1.12; rotate: 7deg; }
+  91% { translate: 0 -1cqw; scale: 1.05; rotate: -3.5deg; }
+  96% { translate: 0 0; scale: 0.98; rotate: 1deg; }
+}
+@keyframes rpTrophyShine {
+  0%, 77% { translate: -150% 0; }
+  95%, 100% { translate: 360% 0; }
+}
+@keyframes rpRaysTada {
+  0%, 76%, 100% { opacity: 0.85; scale: 1; }
+  84% { opacity: 1; scale: 1.12; }
+}
+
+/* The ribbon lies across the panel's top edge; its title word sits on the band. */
+.rp-ribbon {
+  position: absolute;
+  left: 50%;
+  top: 30cqw;
+  width: 100cqw;
+  transform: translateX(-50%);
+  z-index: 3;
+  filter: drop-shadow(0 1cqw 0 rgba(10, 35, 98, 0.35));
+}
+.rp-ribbon-art {
+  width: 100%;
+}
+.rp-title {
+  position: absolute;
+  left: 50%;
+  top: 36%;
+  width: 66%;
+  height: auto;
+  max-height: 52%;
+  object-fit: contain;
+  translate: -50% -50%;
+  /* after the entry pop: a tiny happy bounce every few seconds (scale only; translate centres it) */
+  animation: rpTitleBounce 4s ease-in-out 2.2s infinite;
+  will-change: transform;
+}
+/* PERFECT!: a gold shimmer sweeps across the title word every 2.4 s (masked to the word, like the trophy shine). */
+.rp-title-shine {
+  position: absolute;
+  left: 50%;
+  top: 36%;
+  /* match the word as drawn: the title image is height-limited (52% of the ribbon) and contained */
+  height: 52%;
+  aspect-ratio: 680 / 183;
+  translate: -50% -50%;
+  overflow: hidden;
+  -webkit-mask: url('./assets/ui/result/title_perfect.webp') center / 100% 100% no-repeat;
+  mask: url('./assets/ui/result/title_perfect.webp') center / 100% 100% no-repeat;
+  pointer-events: none;
+  animation: rpTitleBounce 4s ease-in-out 2.2s infinite;
+}
+.rp-title-shine::before {
+  content: '';
+  position: absolute;
+  top: -30%;
+  left: 0;
+  width: 30%;
+  height: 160%;
+  background: linear-gradient(90deg, rgba(255, 220, 90, 0), rgba(255, 236, 140, 0.95) 40%, #fff 50%, rgba(255, 236, 140, 0.95) 60%, rgba(255, 220, 90, 0));
+  rotate: 20deg;
+  translate: -150% 0;
+  animation: rpTitleShine 2.4s ease-in-out 1.2s infinite;
+  will-change: translate;
+}
+@keyframes rpTitleShine {
+  0%, 45% { translate: -150% 0; }
+  85%, 100% { translate: 450% 0; }
+}
+
+@keyframes rpTitleBounce {
+  0%, 82%, 100% { scale: 1; }
+  87% { scale: 1.08 0.94; }
+  92% { scale: 0.96 1.06; }
+  96% { scale: 1.02 0.99; }
+}
+
+/* Three star slots in a gentle arc in front of the trophy. */
+.rp-stars {
+  position: absolute;
+  left: 50%;
+  top: 19.5cqw;
+  width: 46cqw;
+  height: 14cqw;
+  transform: translateX(-50%);
+  z-index: 4;
+}
+.rp-star {
+  position: absolute;
+  width: 16cqw;
+  aspect-ratio: 354 / 323;
+}
+.rp-star img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.rp-star-0 {
+  left: 0;
+  top: 1.2cqw;
+  rotate: -7deg;
+}
+.rp-star-1 {
+  left: 50%;
+  top: -2.5cqw;
+  width: 17.5cqw;
+  margin-left: -8.75cqw;
+}
+.rp-star-2 {
+  right: 0;
+  top: 1.2cqw;
+  rotate: 7deg;
+}
+/* On a win the stars sit a little lower, closer to the ribbon. */
+.rp-win .rp-stars {
+  top: 18.5cqw; /* bigger stars: a touch higher so they still sit just above the ribbon */
+}
+/* On a loss the stars sit a little lower, in front of the bigger worried puck. */
+.rp-lose .rp-stars {
+  top: 19.5cqw;
+}
+
+/* Live score: numbers and names are text. */
+.rp-score {
+  display: flex;
+  align-items: flex-start;
+  gap: 3.6cqw;
+}
+.rp-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+/* Outlined text: a native text stroke drawn under the fill (paint-order) plus one shadow for depth. Much cheaper
+   for phones than stacked drop-shadow filters, which were re-drawn every frame while the popup animated. */
+.rp-score-num,
+.rp-dash,
+.rp-coin-text,
+.rp-btn-text {
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  -webkit-text-stroke: 0.14em var(--navy);
+  paint-order: stroke fill;
+  text-shadow: 0 0.08em 0 var(--navy-deep);
+}
+/* Score digits as in the concept: no stroke. The outline is made of shadows all around the white digit (like the
+   concept's drop-shadow outline), the whole ring set a little lower, plus a darker copy further down for a 3D edge.
+   text-shadow (not filter: drop-shadow) because filters re-render every animation frame and stuttered on phones.
+   Generated: 16 ring offsets at 0.075em around (0, +0.025em), then 2x8 deeper ones. */
+.rp-score-num {
+  position: relative;
+  font-size: 15.5cqw;
+  color: #fff;
+  -webkit-text-fill-color: #fff;
+  -webkit-text-stroke: 0;
+  text-shadow:
+    0.075em 0.025em 0 var(--ring),
+    0.069em 0.054em 0 var(--ring),
+    0.053em 0.078em 0 var(--ring),
+    0.029em 0.094em 0 var(--ring),
+    0.000em 0.100em 0 var(--ring),
+    -0.029em 0.094em 0 var(--ring),
+    -0.053em 0.078em 0 var(--ring),
+    -0.069em 0.054em 0 var(--ring),
+    -0.075em 0.025em 0 var(--ring),
+    -0.069em -0.004em 0 var(--ring),
+    -0.053em -0.028em 0 var(--ring),
+    -0.029em -0.044em 0 var(--ring),
+    -0.000em -0.050em 0 var(--ring),
+    0.029em -0.044em 0 var(--ring),
+    0.053em -0.028em 0 var(--ring),
+    0.069em -0.004em 0 var(--ring),
+    0.075em 0.060em 0 var(--deep),
+    0.053em 0.113em 0 var(--deep),
+    0.000em 0.135em 0 var(--deep),
+    -0.053em 0.113em 0 var(--deep),
+    -0.075em 0.060em 0 var(--deep),
+    -0.053em 0.007em 0 var(--deep),
+    -0.000em -0.015em 0 var(--deep),
+    0.053em 0.007em 0 var(--deep),
+    0.075em 0.085em 0 var(--deep),
+    0.053em 0.138em 0 var(--deep),
+    0.000em 0.160em 0 var(--deep),
+    -0.053em 0.138em 0 var(--deep),
+    -0.075em 0.085em 0 var(--deep),
+    -0.053em 0.032em 0 var(--deep),
+    -0.000em 0.010em 0 var(--deep),
+    0.053em 0.032em 0 var(--deep);
+}
+.rp-you .rp-score-num {
+  --ring: #2f6fe8;
+  --deep: #1a45a8;
+}
+.rp-opp .rp-score-num {
+  --ring: #e0283a;
+  --deep: #9e1322;
+}
+.rp-dash {
+  font-size: 12cqw;
+  margin-top: 1cqw;
+}
+.rp-score-name {
+  margin-top: 0.2cqw;
+  font-size: 4.2cqw;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: 0.04em;
+}
+
+/* The coin counter on the result screen (Home's .stat-bar/.coin-pill, top right) and the coins flying into it. */
+.rp-wallet {
+  z-index: 40;
+}
+.rp-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #fff;
+  pointer-events: none;
+  will-change: opacity;
+}
+.rp-fly-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+.rp-flying-coin {
+  position: fixed;
+  z-index: 50; /* above every part of the popup (ribbon, title, stars) and the counters */
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* The reward line: a bigger coin + amount on a soft golden glow that breathes; the coin rocks now and then. */
+.rp-coins {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1.8cqw;
+  padding: 0.6cqw 4cqw;
+  margin: 8cqw 0 7cqw; /* breathing room above (under the ribbon) and below (before the buttons) */
+}
+.rp-coin-glow {
+  position: absolute;
+  left: -18%;
+  top: -55%;
+  width: 136%;
+  height: 210%;
+  z-index: -1;
+  pointer-events: none;
+  /* a pre-drawn image (see coinGlowImage): fading an image is cheap; a CSS gradient that scales gets redrawn */
+  animation: rpGlow 1.8s ease-in-out infinite;
+  will-change: opacity;
+}
+.rp-coin-icon {
+  width: 15cqw;
+  animation: rpCoinRock 2.6s ease-in-out 1.5s infinite;
+  will-change: transform;
+}
+.rp-coin-text {
+  font-size: 14cqw;
+  /* the button-label outline, made gentler for this big number: a thinner ring from more, slightly soft shadows,
+     so its edge reads smooth instead of stepped */
+  -webkit-text-stroke: 0;
+  text-shadow:
+    0.080em 0.025em 0.6px var(--navy),
+    0.077em 0.046em 0.6px var(--navy),
+    0.069em 0.065em 0.6px var(--navy),
+    0.057em 0.082em 0.6px var(--navy),
+    0.040em 0.094em 0.6px var(--navy),
+    0.021em 0.102em 0.6px var(--navy),
+    0.000em 0.105em 0.6px var(--navy),
+    -0.021em 0.102em 0.6px var(--navy),
+    -0.040em 0.094em 0.6px var(--navy),
+    -0.057em 0.082em 0.6px var(--navy),
+    -0.069em 0.065em 0.6px var(--navy),
+    -0.077em 0.046em 0.6px var(--navy),
+    -0.080em 0.025em 0.6px var(--navy),
+    -0.077em 0.004em 0.6px var(--navy),
+    -0.069em -0.015em 0.6px var(--navy),
+    -0.057em -0.032em 0.6px var(--navy),
+    -0.040em -0.044em 0.6px var(--navy),
+    -0.021em -0.052em 0.6px var(--navy),
+    -0.000em -0.055em 0.6px var(--navy),
+    0.021em -0.052em 0.6px var(--navy),
+    0.040em -0.044em 0.6px var(--navy),
+    0.057em -0.032em 0.6px var(--navy),
+    0.069em -0.015em 0.6px var(--navy),
+    0.077em 0.004em 0.6px var(--navy),
+    0.080em 0.075em 0.6px var(--navy-deep),
+    0.069em 0.115em 0.6px var(--navy-deep),
+    0.040em 0.144em 0.6px var(--navy-deep),
+    0.000em 0.155em 0.6px var(--navy-deep),
+    -0.040em 0.144em 0.6px var(--navy-deep),
+    -0.069em 0.115em 0.6px var(--navy-deep),
+    -0.080em 0.075em 0.6px var(--navy-deep),
+    -0.069em 0.035em 0.6px var(--navy-deep),
+    -0.040em 0.006em 0.6px var(--navy-deep),
+    -0.000em -0.005em 0.6px var(--navy-deep),
+    0.040em 0.006em 0.6px var(--navy-deep),
+    0.069em 0.035em 0.6px var(--navy-deep);
+}
+@keyframes rpGlow {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+@keyframes rpCoinRock {
+  0%, 70%, 100% { rotate: 0deg; scale: 1; }
+  78% { rotate: -14deg; scale: 1.12; }
+  86% { rotate: 10deg; scale: 1.12; }
+  93% { rotate: -4deg; scale: 1; }
+}
+
+/* Buttons: 3-slice sprite (round ends fixed, middle stretches), separate icon, live text. All buttons in a
+   popup share one width (the widest wins), so longer text simply makes them all a bit wider. */
+.rp-buttons {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2cqw;
+  /* Pause-popup proportions: buttons ~73% of the panel width (side margins), ~3.4x wider than tall */
+  width: 74cqw;
+  margin-top: 0.8cqw;
+}
+.rp-btn {
+  /* Chunky Pause-style buttons (assets/ui/buttons/chunky_*.webp, ~196 px tall with ~100 px round ends). */
+  --h: 19.5cqw;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2.2cqw;
+  height: var(--h);
+  box-sizing: border-box;
+  border: solid transparent;
+  border-width: 0 calc(var(--h) * 100 / 196);
+  border-image: var(--btn) 0 100 fill / 0 calc(var(--h) * 100 / 196) stretch;
+  padding: 0 0.8cqw 1.5cqw; /* the art's thick bottom edge: the label sits a little above the middle */
+  background: none;
+  font-family: var(--font);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  pointer-events: auto;
+}
+/* The label and icon may reach into the inner part of each rounded end (the flat glossy area), so a long label
+   fits without shrinking. fitButtons counts this extra room too. */
+.rp-btn:not(.rp-btn-round) > :first-child {
+  margin-left: calc(var(--h) * -0.16);
+}
+.rp-btn:not(.rp-btn-round) > .rp-btn-text:last-child,
+.rp-btn:not(.rp-btn-round) > .rp-btn-coin:last-child {
+  margin-right: calc(var(--h) * -0.16);
+}
+/* A row: a small round icon button + a full button filling the rest (e.g. [home] [CONTINUE]). */
+.rp-btn-row {
+  display: flex;
+  gap: 1.8cqw;
+}
+.rp-btn-row > .rp-btn:not(.rp-btn-round) {
+  flex: 1;
+  min-width: 0; /* never wider than the row: a long label shrinks instead (see fitButtons) */
+}
+/* Round icon-only button: the 3-slice pill with no middle, so its two round ends make a circle. */
+.rp-btn.rp-btn-round {
+  flex: none;
+  width: calc(var(--h) * 200 / 196);
+  padding: 0 0 1.2cqw;
+  gap: 0;
+}
+.rp-btn-round .rp-btn-icon {
+  height: 12cqw;
+  margin: 0.4cqw -10cqw 0; /* the icon is centred over the button, across both round ends */
+}
+
+.rp-btn {
+  /* one thick navy outline on every label, like the Pause buttons */
+  --txt-edge: var(--navy);
+  --txt-deep: var(--navy-deep);
+}
+.rp-btn-gold {
+  --btn: url('./assets/ui/buttons/chunky_gold.webp');
+}
+.rp-btn-green {
+  --btn: url('./assets/ui/buttons/chunky_green.webp');
+}
+.rp-btn-blue {
+  --btn: url('./assets/ui/buttons/chunky_blue.webp');
+}
+.rp-btn-orange {
+  --btn: url('./assets/ui/buttons/chunky_orange.webp');
+}
+.rp-btn:disabled {
+  filter: grayscale(0.85) brightness(0.95);
+  cursor: default;
+}
+.rp-btn-icon {
+  height: 10.8cqw; /* includes the baked depth shade under the icon */
+  margin-top: 0.4cqw;
+  width: auto;
+  flex: none;
+}
+.rp-btn-text {
+  font-family: var(--font-label);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  font-size: 9.8cqw;
+  white-space: nowrap;
+  -webkit-text-stroke: 0;
+  /* gentler outline: a thinner ring from more, slightly soft shadows (smooth edge, no stepping) */
+  text-shadow:
+    0.085em 0.025em 0.5px var(--txt-edge),
+    0.082em 0.047em 0.5px var(--txt-edge),
+    0.074em 0.068em 0.5px var(--txt-edge),
+    0.060em 0.085em 0.5px var(--txt-edge),
+    0.043em 0.099em 0.5px var(--txt-edge),
+    0.022em 0.107em 0.5px var(--txt-edge),
+    0.000em 0.110em 0.5px var(--txt-edge),
+    -0.022em 0.107em 0.5px var(--txt-edge),
+    -0.042em 0.099em 0.5px var(--txt-edge),
+    -0.060em 0.085em 0.5px var(--txt-edge),
+    -0.074em 0.068em 0.5px var(--txt-edge),
+    -0.082em 0.047em 0.5px var(--txt-edge),
+    -0.085em 0.025em 0.5px var(--txt-edge),
+    -0.082em 0.003em 0.5px var(--txt-edge),
+    -0.074em -0.017em 0.5px var(--txt-edge),
+    -0.060em -0.035em 0.5px var(--txt-edge),
+    -0.043em -0.049em 0.5px var(--txt-edge),
+    -0.022em -0.057em 0.5px var(--txt-edge),
+    -0.000em -0.060em 0.5px var(--txt-edge),
+    0.022em -0.057em 0.5px var(--txt-edge),
+    0.043em -0.049em 0.5px var(--txt-edge),
+    0.060em -0.035em 0.5px var(--txt-edge),
+    0.074em -0.018em 0.5px var(--txt-edge),
+    0.082em 0.003em 0.5px var(--txt-edge),
+    0.085em 0.075em 0.5px var(--txt-deep),
+    0.074em 0.118em 0.5px var(--txt-deep),
+    0.043em 0.149em 0.5px var(--txt-deep),
+    0.000em 0.160em 0.5px var(--txt-deep),
+    -0.042em 0.149em 0.5px var(--txt-deep),
+    -0.074em 0.118em 0.5px var(--txt-deep),
+    -0.085em 0.075em 0.5px var(--txt-deep),
+    -0.074em 0.033em 0.5px var(--txt-deep),
+    -0.043em 0.001em 0.5px var(--txt-deep),
+    -0.000em -0.010em 0.5px var(--txt-deep),
+    0.043em 0.001em 0.5px var(--txt-deep),
+    0.074em 0.032em 0.5px var(--txt-deep);
+}
+/* A coin after a button's amount, and a small round badge on its top-right corner (the "x3" on the ad button). */
+.rp-btn-coin {
+  height: 8.6cqw;
+  width: auto;
+  flex: none;
+  margin-left: -0.6cqw;
+}
+.rp-btn-badge {
+  /* the painted starburst sticker (badge_burst.webp, same art language as the buttons) with live text on it */
+  position: absolute;
+  top: -4.4cqw;
+  right: -3cqw;
+  width: 13cqw;
+  aspect-ratio: 492 / 476;
+  background: url('./assets/ui/result/badge_burst.webp') center / contain no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 0.4cqw;
+  box-sizing: border-box;
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 4.8cqw;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0.090em 0.020em 0 #6e0b1a, 0.078em 0.065em 0 #6e0b1a, 0.045em 0.098em 0 #6e0b1a, 0.000em 0.110em 0 #6e0b1a, -0.045em 0.098em 0 #6e0b1a, -0.078em 0.065em 0 #6e0b1a, -0.090em 0.020em 0 #6e0b1a, -0.078em -0.025em 0 #6e0b1a, -0.045em -0.058em 0 #6e0b1a, -0.000em -0.070em 0 #6e0b1a, 0.045em -0.058em 0 #6e0b1a, 0.078em -0.025em 0 #6e0b1a, 0 0.12em 0 #6e0b1a;
+  rotate: 12deg;
+  animation: rpBadgePop 1.6s ease-in-out 2s infinite;
+  will-change: transform;
+  pointer-events: none;
+}
+.rp-btn:disabled .rp-btn-badge {
+  animation: none;
+}
+@keyframes rpBadgePop {
+  0%, 70%, 100% { scale: 1; }
+  80% { scale: 1.25; }
+  90% { scale: 0.95; }
+}
+/* The main button breathes once the popup has settled (individual `scale`, so the entry's transform and the press
+   squash still work on top of it). */
+.rp-breathe {
+  animation: rpBreathe 1.3s ease-in-out 1.8s infinite;
+}
+@keyframes rpBreathe {
+  0%, 100% { scale: 1; }
+  50% { scale: 1.06; }
+}
+/* The light sweep (rewarded-ad button only), clipped to the pill's inside. */
+.rp-shine::after {
+  content: '';
+  position: absolute;
+  inset: 1.4cqw calc(var(--h) * -0.36) 2cqw;
+  border-radius: 999px;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.6) 50%, transparent 62%) no-repeat;
+  background-size: 250% 100%;
+  animation: rpShine 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes rpSpin {
+  to { rotate: 360deg; }
+}
+@keyframes rpPulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+@keyframes rpShine {
+  0% { background-position: 160% 0; }
+  45%, 100% { background-position: -60% 0; }
+}
+
 .hit {
   position: absolute;
   left: var(--l);
@@ -324,7 +1226,7 @@ button {
 /* Home: round Locker button in the bottom-right corner, level with the PLAY button. */
 .locker-btn {
   right: 3.5vw;
-  bottom: calc(var(--safe-bottom) + 9vh + min(56vw, 320px) * 281 / 570 / 2 - min(14vw, 64px) / 2);
+  bottom: calc(var(--safe-bottom) + 8vh + min(62vw, 350px) * 425 / 880 / 2 - min(14vw, 64px) / 2);
   width: min(14vw, 64px);
   aspect-ratio: 246 / 249;
   background-image: url('./assets/ui/locker/btn_locker.webp');
@@ -385,7 +1287,7 @@ button {
   font-size: min(5vw, 24px);
   letter-spacing: 0.02em;
   color: #fff;
-  text-shadow: var(--outline);
+  text-shadow: var(--label-shadow);
   cursor: pointer;
   transition: transform 0.08s ease;
 }
@@ -491,17 +1393,17 @@ button {
   left: 0;
   right: 0;
   /* The name has its own row at the bottom, below the mallet (never over it). */
-  top: 73.5%;
+  top: 76%;
   font-weight: 700;
   font-size: 14.5cqw;
   line-height: 1;
   color: #fff;
-  text-shadow: var(--outline);
+  text-shadow: var(--label-shadow);
 }
 
 .card-name.long {
   font-size: 11.5cqw;
-  top: 75%;
+  top: 77.5%;
 }
 
 .card-tag {
@@ -517,7 +1419,7 @@ button {
   font-weight: 700;
   font-size: 10.5cqw;
   color: #fff;
-  text-shadow: var(--outline);
+  text-shadow: var(--label-shadow);
 }
 
 .card-tag.level {
@@ -537,7 +1439,7 @@ button {
   font-weight: 700;
   font-size: min(7vw, 32px);
   color: #fff;
-  text-shadow: var(--outline);
+  text-shadow: var(--label-shadow);
 }
 
 /* ---------- Studio splash ---------- */
@@ -609,4 +1511,156 @@ button {
 @keyframes cardIn {
   from { opacity: 0; transform: translateY(40px) scale(0.85); }
   to { opacity: 1; transform: none; }
+}
+
+/* ---------- LEVEL UP popup (ResultPopup.showLevelUp; sprites in assets/ui/levelup/) ---------- */
+/* The unlocked item stands on the Locker pedestal above the ribbon, where the win popup's trophy goes. */
+.rp-unlock {
+  position: absolute;
+  left: 50%;
+  top: -12cqw; /* the pedestal's foot tucks behind the ribbon */
+  width: 64cqw;
+  height: 50cqw;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+}
+.rp-pedestal {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 62cqw;
+  margin-left: -31cqw;
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+/* The square 3D view, centred on the middle of the pedestal's top oval: the item's base is the view's centre (see
+   ItemSpinner). The pedestal is 62cqw wide, so 27.03cqw tall: its top is 50 - 27.03 = 22.97cqw down the stage, the oval
+   centre 29.8% into the sprite = 31.02cqw; minus half the view (32cqw) = -0.98cqw. It stays put (no float), so the item
+   always stands on the pedestal. */
+.rp-unlock-item {
+  position: absolute;
+  left: 50%;
+  top: -0.98cqw;
+  width: 64cqw;
+  transform: translateX(-50%);
+}
+.rp-unlock-art {
+  width: 100%;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.rp-new {
+  position: absolute;
+  right: 1cqw;
+  top: 9cqw;
+  width: 16cqw;
+  z-index: 3;
+  animation: rpNewPop 2.6s ease-in-out 2.2s infinite;
+  will-change: transform;
+}
+@keyframes rpNewPop {
+  0%, 75%, 100% { scale: 1; rotate: 0deg; }
+  82% { scale: 1.2; rotate: -10deg; }
+  89% { scale: 1.1; rotate: 8deg; }
+  95% { scale: 1; rotate: -2deg; }
+}
+
+/* The level star with the live level number. */
+.rp-level {
+  position: relative;
+  width: 27cqw;
+  /* just under the ribbon: its band ends ~50cqw down the card (30cqw + 62% of its 31cqw), the panel's content starts
+     at 51cqw (39 + 4 border + 8 padding), so the star's tip sits ~4cqw below the band */
+  margin-top: 3cqw;
+  will-change: transform;
+}
+.rp-level-star {
+  position: relative;
+  width: 100%;
+  animation: rpTitleBounce 4s ease-in-out 2.6s infinite;
+}
+.rp-level-num {
+  position: absolute;
+  left: 50.5%;
+  top: 48.7%; /* the middle of the biggest circle inside the star (Lilita digits are centred in their line box) */
+  translate: -50% -50%;
+  margin-top: -0.04em; /* the outline's depth edge hangs below the digit: lift it so the whole number looks centred */
+  font-family: var(--font);
+  font-size: 12cqw;
+  white-space: nowrap;
+  line-height: 1;
+  color: #fff;
+  text-shadow: var(--label-shadow);
+  will-change: transform;
+}
+.rp-unlock-name {
+  font-family: var(--font);
+  font-size: 7.5cqw;
+  line-height: 1.1;
+  color: #fff;
+  text-shadow: var(--label-shadow);
+  letter-spacing: 0.02em;
+  text-align: center;
+  margin-bottom: 4cqw; /* room before the buttons */
+  will-change: transform;
+}
+/* The breathing golden glow behind the level star (the win popup's coin-line glow, same pre-drawn image). */
+.rp-level-glow {
+  position: absolute;
+  left: -60%;
+  top: -55%;
+  width: 220%;
+  height: 210%;
+  pointer-events: none;
+  animation: rpGlow 1.8s ease-in-out infinite;
+  will-change: opacity;
+}
+/* The live 3D view (a square canvas, ItemSpinner). */
+.rp-unlock-view {
+  display: block;
+  aspect-ratio: 1;
+  height: auto;
+}
+
+/* ---------- "NEW!" marks (saved progress: an unlocked item stays new until it is equipped) ---------- */
+/* A red dot with a white ring on the Home Locker button and on Locker tabs that have a new item. */
+.locker-btn.has-new::after,
+.locker-tab.has-new::after {
+  content: '';
+  position: absolute;
+  top: -6%;
+  right: -6%;
+  width: 30%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ff8a8a, #ff2d3d 55%, #c4101f);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px var(--navy), 0 2px 0 2px var(--navy-deep);
+  animation: newDot 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+.locker-tab {
+  position: relative;
+}
+.locker-tab.has-new::after {
+  top: -14%;
+  right: -3%;
+  width: auto;
+  height: 46%;
+}
+@keyframes newDot {
+  0%, 70%, 100% { scale: 1; }
+  80% { scale: 1.25; }
+  90% { scale: 0.95; }
+}
+/* The NEW! badge on a Locker card (top-right corner, tilted). */
+.card-new {
+  position: absolute;
+  top: -4%;
+  right: -5%;
+  width: 34cqw;
+  rotate: 12deg;
+  pointer-events: none;
+  animation: rpNewPop 2.6s ease-in-out 0.6s infinite;
 }

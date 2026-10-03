@@ -95,6 +95,32 @@ export class Sound {
     this.click(0.4, 0.3, 800);
   }
 
+  /** A result-popup star lands; each one a step higher. */
+  star(i: number): void {
+    const f = [784, 988, 1175][Math.min(2, i)];
+    this.tone(f, 0.12, 'triangle', 0.3);
+    this.tone(f * 1.5, 0.18, 'sine', 0.18, 1, 0.05);
+  }
+
+  /** A soft tick for the result score counting up, a little higher each step. */
+  tick(step: number): void {
+    this.tone(700 + Math.min(step, 7) * 60, 0.04, 'triangle', 0.18);
+  }
+
+  /** A flying star lands in the star counter: a bright two-note sparkle, a step higher for each star. */
+  starLand(i: number): void {
+    const f = [1047, 1319, 1568][Math.min(2, i)];
+    this.tone(f, 0.08, 'triangle', 0.25);
+    this.tone(f * 2, 0.14, 'sine', 0.14, 1, 0.04);
+  }
+
+  /** A flying coin lands in the counter: a short bright ping, climbing a little with each coin in the stream. */
+  coin(i: number): void {
+    const f = 1320 + Math.min(i, 12) * 45;
+    this.tone(f, 0.05, 'square', 0.08);
+    this.tone(f * 1.5, 0.09, 'triangle', 0.12, 1, 0.025);
+  }
+
   win(): void {
     [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.22, 'triangle', 0.28, 1, i * 0.11));
   }

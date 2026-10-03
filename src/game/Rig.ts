@@ -1,12 +1,15 @@
 import { Color3, Color4, ParticleSystem, Scene, TransformNode, Vector3 } from '../babylon';
 import { Effects, makeFlareTexture } from './Effects';
-import { COLORS, createPaddle, createPuck, createTable, loadPaddleModel, loadPuckModel, loadTableModel, OPPONENT_MALLET, puckColor, type TableParts } from './Meshes';
+import { COLORS, createPaddle, createPuck, createTable, loadPaddleModel, loadPuckModel, loadTableModel, OPPONENT_MALLET, puckBits, puckColor, puckTrail, type TableParts } from './Meshes';
+import { PuckFx } from './PuckFx';
 import { equippedMallet, equippedPuck, equippedTable } from './Skins';
 import { GOAL_HALF, HALF_L, World, type HitEvent, type Side } from './Physics';
 
 // Goal-strip colors, precomputed so the per-frame flash update allocates nothing.
 const GOAL_BASE = { bottom: COLORS.player.scale(0.55), top: COLORS.ai.scale(0.55) };
 const WHITE = Color3.White();
+/** How far behind the puck's center the speed streak starts (puck radius 0.45 + the blobs' half size). */
+const STREAK_BEHIND = 0.6;
 
 /** Visual representation of a physics World, plus hit/goal effects. */
 export class Rig {
@@ -20,12 +23,16 @@ export class Rig {
   private readonly streakPrev = new Vector3();
   private readonly streakCur = new Vector3();
   private readonly streakEnabled: boolean;
+  /** The equipped puck's themed bits (stars, hearts, snowflakes…). */
+  private readonly bits: PuckFx;
   private spin = 0;
   private falling = false;
   /** 0→1 pop-in progress of a freshly served puck. */
   private spawn = 1;
   private fallVel = { x: 0, y: 0, z: 0 };
   private goalFlash = { bottom: 0, top: 0 };
+  /** Display size of each mallet (the Big Mallet booster grows the player's). */
+  readonly paddleScale: [number, number] = [1, 1];
   /** Hit sparks and goal bursts on the player's side take the equipped skin's color. */
   private readonly playerColor: Color3;
   /** The speed trail and rail sparks take the equipped puck's color. */
@@ -61,6 +68,8 @@ export class Rig {
     this.puckColor = puckColor(equippedPuck().id);
     this.streak = this.createStreak(scene);
     this.streakEnabled = streak;
+    const bits = puckBits(equippedPuck().id);
+    this.bits = new PuckFx(scene, bits.sprites, this.streakPrev, this.streakCur, STREAK_BEHIND, bits.tint);
 
     this.effects = new Effects(scene);
     this.world.resetPaddles();
@@ -75,6 +84,7 @@ export class Rig {
     this.sync(0);
     this.streakPrev.copyFrom(this.streakCur);
     this.streak.reset();
+    this.bits.reset();
   }
 
   /** Called when a goal is scored: the puck drops into the pocket. */
@@ -98,6 +108,7 @@ export class Rig {
       } else {
         this.effects.wall(e.x, e.z, this.puckColor, e.strength);
       }
+      if (this.streakEnabled) this.bits.burst(e.x, e.z, e.strength);
       listener?.(e);
     }
     this.world.events.length = 0;
@@ -107,7 +118,8 @@ export class Rig {
     const w = this.world;
     // Draw between the last two physics ticks (w.alpha) so motion is smooth at any frame rate.
     const a = w.alpha;
-    w.paddles.forEach((p, i) => {
+    for (let i = 0; i < 2; i++) {
+      const p = w.paddles[i];
       const node = this.paddleNodes[i];
       node.position.set(p.prevX + (p.x - p.prevX) * a, 0, p.prevZ + (p.z - p.prevZ) * a);
       // Lean into the direction of motion for a bit of weight.
@@ -117,7 +129,8 @@ export class Rig {
       const k = dt > 0 ? Math.min(1, dt * 12) : 1;
       node.rotation.x += (tx - node.rotation.x) * k;
       node.rotation.z += (tz - node.rotation.z) * k;
-    });
+      if (node.scaling.x !== this.paddleScale[i]) node.scaling.setAll(this.paddleScale[i]);
+    }
 
     const speed = w.puckSpeed();
     if (this.falling) {
@@ -153,9 +166,10 @@ export class Rig {
     this.streakPrev.copyFrom(this.streakCur);
     this.streakCur.set(w.puckRenderX(), 0.08, w.puckRenderZ());
     this.streak.emitRate = this.falling || !this.streakEnabled ? 0 : Math.max(0, Math.min(320, (speed - 4) * 16));
+    this.bits.trail(speed, !this.falling && this.streakEnabled);
 
-    // Goal strips flash after a goal.
-    for (const key of ['bottom', 'top'] as const) {
+    // Goal strips flash after a goal (only the procedural stand-in table has them).
+    if (!this.table.solidGoals) for (const key of ['bottom', 'top'] as const) {
       const f = this.goalFlash[key];
       const base = key === 'bottom' ? GOAL_BASE.bottom : GOAL_BASE.top;
       Color3.LerpToRef(base, WHITE, f * (0.5 + 0.5 * Math.sin(f * 40)), this.table.goalGlow[key].emissiveColor);
@@ -169,30 +183,42 @@ export class Rig {
     const ps = new ParticleSystem('puckStreak', 500, scene);
     ps.particleTexture = makeFlareTexture(scene);
     ps.emitter = this.streakCur;
-    // Spread spawns along the segment travelled since last frame so fast shots don't leave gaps.
+    // Spread spawns along the segment travelled since last frame so fast shots don't leave gaps,
+    // moved back behind the puck: born at its center, the blobs covered the puck's own top.
+    const back = new Vector3();
+    let warming = true;
     ps.startPositionFunction = (_m, pos) => {
+      if (warming) return void pos.set(0, -3, 0); // the load-time warm-up blob, out of sight below the table
       Vector3.LerpToRef(this.streakPrev, this.streakCur, Math.random(), pos);
+      this.streakCur.subtractToRef(this.streakPrev, back);
+      const len = back.length();
+      if (len > 1e-6) pos.subtractInPlace(back.scaleInPlace(STREAK_BEHIND / len));
     };
     ps.minEmitPower = ps.maxEmitPower = 0;
     ps.minLifeTime = 0.16;
     ps.maxLifeTime = 0.3;
-    ps.minSize = 0.34;
-    ps.maxSize = 0.46;
-    ps.addSizeGradient(0, 1);
-    ps.addSizeGradient(1, 0.15);
+    // Size gradients set the size itself (they override minSize/maxSize): 0.34–0.46 wide at the
+    // head, tapering to 15%. (Before, the 1 → 0.15 factors were drawn as sizes: a puck-wide smear.)
+    ps.addSizeGradient(0, 0.34, 0.46);
+    ps.addSizeGradient(1, 0.34 * 0.15, 0.46 * 0.15);
     // Additive blending vanishes on the white table: use a soft alpha-blended yellow trail.
     // In the puck's color: a bright head, a deeper tail, fading out pale.
     const c = this.puckColor;
-    const light = Color3.Lerp(c, Color3.White(), 0.25);
-    const pale = Color3.Lerp(c, Color3.White(), 0.6);
+    const own = puckTrail(equippedPuck().id);
+    const light = own ? own[0] : Color3.Lerp(c, Color3.White(), 0.25);
+    const tail = own ? own[1] : new Color3(c.r * 0.95, c.g * 0.85, c.b * 0.85);
+    const pale = Color3.Lerp(own ? own[1] : c, Color3.White(), 0.6);
     ps.color1 = new Color4(light.r, light.g, light.b, 0.55);
-    ps.color2 = new Color4(c.r * 0.95, c.g * 0.85, c.b * 0.85, 0.45);
+    ps.color2 = new Color4(tail.r, tail.g, tail.b, 0.45);
     ps.colorDead = new Color4(pale.r, pale.g, pale.b, 0);
     ps.blendMode = ParticleSystem.BLENDMODE_STANDARD;
     ps.gravity = Vector3.Zero();
     ps.updateSpeed = 1 / 60;
     ps.emitRate = 0;
     ps.start();
+    // Warm-up (see PuckFx): draw one blob out of sight while the match loads, so the first fast shot doesn't freeze.
+    ps.manualEmitCount = 1;
+    scene.onAfterRenderObservable.addOnce(() => scene.onAfterRenderObservable.addOnce(() => (warming = false)));
     return ps;
   }
 }

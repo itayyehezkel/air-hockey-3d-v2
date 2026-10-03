@@ -49,7 +49,6 @@ export class Effects {
     this.sparks.updateSpeed = 1 / 60;
     // Alpha-blended so sparks read as bright confetti bits on the white table (additive would wash out).
     this.sparks.blendMode = ParticleSystem.BLENDMODE_STANDARD;
-    this.sparks.colorDead = new Color4(0, 0, 0, 0);
     this.sparks.start();
 
     this.embers = new ParticleSystem('embers', 900, scene);
@@ -66,9 +65,10 @@ export class Effects {
     this.embers.gravity = new Vector3(0, -6, 0);
     this.embers.updateSpeed = 1 / 60;
     this.embers.blendMode = ParticleSystem.BLENDMODE_STANDARD;
-    this.embers.colorDead = new Color4(0, 0, 0, 0);
-    this.embers.addSizeGradient(0, 1);
-    this.embers.addSizeGradient(1, 0.1);
+    // Size gradients set the size itself (they override minSize/maxSize): keep the 0.08–0.32 range,
+    // shrinking to 10%. (Before, the 1 → 0.1 factors were drawn as sizes: puck-sized blobs.)
+    this.embers.addSizeGradient(0, 0.08, 0.32);
+    this.embers.addSizeGradient(1, 0.008, 0.032);
     this.embers.start();
 
     // Shockwave rings are pooled: building a mesh + material per hit caused a frame hitch every time.
@@ -140,6 +140,8 @@ export class Effects {
     const bright = Color4.FromColor3(Color3.Lerp(color, Color3.White(), 0.25), 1);
     ps.color1 = bright;
     ps.color2 = Color4.FromColor3(color, 1);
+    // Fade out in the burst's own color: fading toward black left grey smudges on light tables.
+    ps.colorDead = Color4.FromColor3(color, 0);
     ps.minEmitPower = 2.5 * power;
     ps.maxEmitPower = 7 * power;
     ps.manualEmitCount = (ps.manualEmitCount > 0 ? ps.manualEmitCount : 0) + count;

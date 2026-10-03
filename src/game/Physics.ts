@@ -30,6 +30,14 @@ const PADDLE_RESTITUTION = 0.9;
 const WALL_RESTITUTION = 0.86;
 const FRICTION = 0.22; // exponential damping per second (air cushion is almost frictionless)
 const MAX_PUCK_SPEED = 24;
+/** Corner air cushion (see World.cornerAir): push (units/s²), below this puck speed, this far out of the corner arc. */
+const CORNER_AIR = 5;
+const CORNER_AIR_MAX_SPEED = 2;
+const CORNER_AIR_REACH = 0.35;
+/** Speed a puck pinched between a mallet and a wall squirts out at (see separatePinned). */
+const SQUIRT_SPEED = 7;
+/** The table models' corner caps reach this far into the field: the puck stops at them. */
+const CORNER_INSET = 0.1;
 /**
  * How quickly a finger-driven mallet catches up with the finger (1/s). Touch events arrive out of
  * step with physics ticks; following exponentially turns their jumps into a continuous velocity,
@@ -185,6 +193,7 @@ export class World {
       scored = this.checkGoal();
       puck.vx *= FRICTION_PER_STEP;
       puck.vz *= FRICTION_PER_STEP;
+      this.cornerAir();
     }
 
     // Report the motion that actually happened (a pinned mallet stopped short).
@@ -249,6 +258,20 @@ export class World {
     clampToHalfInto(p, puck.x - nx * minD, puck.z - nz * minD, tmp);
     p.x = tmp.x;
     p.z = tmp.z;
+    // Pinched between the mallet and a wall, a real puck squirts out sideways: send it along the
+    // wall, toward the open table, instead of letting it rattle in place (it could stay stuck in a
+    // corner as long as the mallet kept pushing).
+    let tx = -nz;
+    let tz = nx;
+    if (tx * -puck.x + tz * -puck.z < 0) {
+      tx = -tx;
+      tz = -tz;
+    }
+    const along = puck.vx * tx + puck.vz * tz;
+    if (along < SQUIRT_SPEED) {
+      puck.vx = tx * SQUIRT_SPEED + nx * 1.5;
+      puck.vz = tz * SQUIRT_SPEED + nz * 1.5;
+    }
   }
 
   private collideWalls(): void {
@@ -277,7 +300,7 @@ export class World {
         const oz = puck.z - cz;
         if (ox * sx <= 0 || oz * sz <= 0) continue;
         const d = Math.hypot(ox, oz);
-        const lim = CORNER_R - r;
+        const lim = CORNER_R - r - CORNER_INSET; // the corner caps bulge a little into the field
         if (d <= lim) continue;
         const nx = ox / d;
         const nz = oz / d;
@@ -291,6 +314,23 @@ export class World {
         }
       }
     }
+  }
+
+  /**
+   * Air cushion in the corners: a mallet (bigger than the puck) can't get behind a puck sitting deep
+   * in a rounded corner, and pushing from the table side only pins it there. A slow puck in a corner
+   * therefore drifts back out toward the open table, like air from the holes would nudge it.
+   */
+  private cornerAir(): void {
+    const puck = this.puck;
+    if (puck.vx * puck.vx + puck.vz * puck.vz > CORNER_AIR_MAX_SPEED * CORNER_AIR_MAX_SPEED) return;
+    const sx = puck.x < 0 ? -1 : 1;
+    const sz = puck.z < 0 ? -1 : 1;
+    const ox = puck.x - sx * (HALF_W - CORNER_R - CORNER_AIR_REACH);
+    const oz = puck.z - sz * (HALF_L - CORNER_R - CORNER_AIR_REACH);
+    if (ox * sx <= 0 || oz * sz <= 0) return; // not in a corner
+    puck.vx -= sx * CORNER_AIR * STEP;
+    puck.vz -= sz * CORNER_AIR * STEP;
   }
 
   private collideEnd(end: -1 | 1): void {

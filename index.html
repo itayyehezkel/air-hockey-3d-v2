@@ -20,7 +20,13 @@
     <section id="home" class="screen hidden">
       <button id="settingsBtn" class="sprite-btn gear-btn" aria-label="Settings"></button>
       <h1 class="logo" aria-label="Air Smash"></h1>
-      <button id="playBtn" class="sprite-btn play-btn" aria-label="Play"></button>
+      <!-- Top-right counters: the numbers are live text on blank pill sprites. -->
+      <div class="stat-bar">
+        <div id="coinPill" class="stat-pill coin-pill" aria-label="Coins"><span id="coinCount" class="num stat-num">0</span></div>
+        <div id="starPill" class="stat-pill star-pill" aria-label="Stars"><span id="starCount" class="num stat-num">0</span></div>
+      </div>
+      <!-- "PLAY" is baked into the sprite; the second line is live text (changes with the player's level). -->
+      <button id="playBtn" class="sprite-btn play-btn" aria-label="Play"><span id="playLevel" class="num play-sub">LEVEL 1</span></button>
       <button id="lockerBtn" class="sprite-btn locker-btn" aria-label="Locker"></button>
     </section>
 
@@ -67,6 +73,14 @@
         </label>
         <div class="switch-off" data-for="vibrationToggle" style="--l: 62.5%; --t: 56.9%; --w: 21.9%; --h: 10%"></div>
         <button id="closeSettingsBtn" class="hit" style="--l: 15.2%; --t: 73.6%; --w: 69.2%; --h: 15.5%" aria-label="OK"></button>
+      </div>
+    </section>
+
+    <!-- Free booster offer, before some matches (slides up over the home screen) -->
+    <section id="boosterOffer" class="modal booster-modal hidden">
+      <div class="popup booster-popup" role="dialog" aria-label="Free booster: Big Mallet, a bigger mallet for this match">
+        <button id="boosterGetBtn" class="hit" style="--l: 18.9%; --t: 72.8%; --w: 61.8%; --h: 14.1%" aria-label="Get it (watch an ad)"></button>
+        <button id="boosterSkipBtn" class="hit" style="--l: 30%; --t: 89.6%; --w: 40%; --h: 7%" aria-label="No thanks"></button>
       </div>
     </section>
 

@@ -1,9 +1,9 @@
 import {
+  BaseTexture,
   Color3,
   Color4,
   DirectionalLight,
   DynamicTexture,
-  FresnelParameters,
   ImportMeshAsync,
   PBRMaterial,
   RawCubeTexture,
@@ -20,10 +20,42 @@ import {
 import malletModelUrl from '../assets/mallet.glb';
 import puckModelUrl from '../assets/puck-star.glb';
 import puckMacaronModelUrl from '../assets/puck-macaron.glb';
+import puckSnowflakeModelUrl from '../assets/puck-snowflake.glb';
+import puckSunModelUrl from '../assets/puck-sun.glb';
+import vfxSunUrl from '../assets/vfx/sun.png';
+import vfxLadybugUrl from '../assets/vfx/ladybug.png';
+import vfxBeachBallUrl from '../assets/vfx/beachball.png';
+import vfxCherryUrl from '../assets/vfx/cherry.png';
+import vfxBaoUrl from '../assets/vfx/bao.png';
+import vfxSteamUrl from '../assets/vfx/steam.png';
+import vfxLeafUrl from '../assets/vfx/leaf.png';
+import vfxRainDropUrl from '../assets/vfx/raindrop.png';
+import vfxGoldSparkleUrl from '../assets/vfx/goldsparkle.png';
+import puckLadybugModelUrl from '../assets/puck-ladybug.glb';
+import vfxRedDotUrl from '../assets/vfx/reddot.png';
+import puckBeachBallModelUrl from '../assets/puck-beachball.glb';
+import vfxYellowDotUrl from '../assets/vfx/yellowdot.png';
+import puckCherryPieModelUrl from '../assets/puck-cherrypie.glb';
+import vfxCrustDotUrl from '../assets/vfx/crustdot.png';
+import puckBaoModelUrl from '../assets/puck-bao.glb';
+import puckLilyPadModelUrl from '../assets/puck-lilypad.glb';
+import vfxStarUrl from '../assets/vfx/star.png';
+import vfxTwinkleUrl from '../assets/vfx/twinkle.png';
+import vfxHeartUrl from '../assets/vfx/heart.png';
+import vfxSprinklesUrl from '../assets/vfx/sprinkles.png';
+import vfxSnowflakeUrl from '../assets/vfx/snowflake.png';
+import vfxFrostUrl from '../assets/vfx/frost.png';
 import tableModelUrl from '../assets/table-classic.glb';
 import tableSurfaceUrl from '../assets/table-classic-surface.webp';
-import tableIceSurfaceUrl from '../assets/table-ice-surface.webp';
-import tableIceModelUrl from '../assets/table-ice.glb';
+import tableGardenModelUrl from '../assets/table-garden.glb';
+import tableCloudyModelUrl from '../assets/table-cloudy.glb';
+import tablePicnicModelUrl from '../assets/table-picnic.glb';
+import tableBeachModelUrl from '../assets/table-beach.glb';
+import tableIceCreamModelUrl from '../assets/table-icecream.glb';
+import tableFrozenModelUrl from '../assets/table-frozen.glb';
+import tableDimSumModelUrl from '../assets/table-dimsum.glb';
+import tableRainyModelUrl from '../assets/table-rainy.glb';
+import goalModelUrl from '../assets/goal.glb';
 import { CORNER_R, GOAL_HALF, HALF_L, HALF_W, TABLE } from './Physics';
 
 export const COLORS = {
@@ -46,6 +78,8 @@ export function createStage(scene: Scene): void {
   scene.skipPointerMovePicking = true;
   scene.skipPointerDownPicking = true;
   scene.skipPointerUpPicking = true;
+  // The whole table is always in view: skip the per-mesh visibility tests every frame.
+  scene.skipFrustumClipping = true;
 
   const hemi = new HemisphericLight('hemi', new Vector3(0, 1, 0), scene);
   hemi.intensity = 0.8;
@@ -412,9 +446,29 @@ async function loadModel(
   if (yaw) root.addRotation(0, yaw, 0);
   for (const m of meshes) {
     m.isPickable = false;
-    if (m.material instanceof PBRMaterial) tune(m.material);
+    if (m.material instanceof PBRMaterial) {
+      tune(m.material);
+      freezeWhenReady(m.material);
+    }
   }
+  // The stand-in (or the previous skin) goes, with its materials.
+  const oldMaterials = new Set(previous.map((m) => m.material).filter((m) => m !== null));
   for (const m of previous) m.dispose();
+  for (const m of oldMaterials) m.dispose(false, true);
+}
+
+/**
+ * A skin's material never changes after it is set up, so it is frozen (no per-frame checks), but only
+ * once all its textures are ready and it has been drawn: frozen earlier, it would stay without them
+ * (the gold mallet lost its shine, frozen before its reflection texture was ready).
+ */
+function freezeWhenReady(m: PBRMaterial): void {
+  const scene = m.getScene();
+  BaseTexture.WhenAllReady(m.getActiveTextures(), () => {
+    scene.onAfterRenderObservable.addOnce(() => {
+      if (!m.isFrozen) m.freeze();
+    });
+  });
 }
 
 /**
@@ -483,16 +537,22 @@ function texturedMallet(m: PBRMaterial, look: MalletLook): void {
   }
 }
 
-const studioEnvs = new WeakMap<Scene, RawCubeTexture>();
+const STUDIO_SIZE = 32;
+let studioPixels: Uint8Array[] | null = null;
 
 /**
- * A tiny procedural reflection environment (sky-blue gradient, bright soft boxes, darker floor),
- * built once per scene. Metal needs something to reflect; loading an HDR file would add size.
+ * A tiny procedural reflection environment (sky-blue gradient, bright soft boxes, darker floor).
+ * Metal needs something to reflect; loading an HDR file would add size. Each material gets its own
+ * texture (32x32 per face, so cheap): a model is disposed with its textures, and a shared one would
+ * be pulled out from under other metal skins (the Locker's card renders did that to its pedestal).
  */
 function studioEnvironment(scene: Scene): RawCubeTexture {
-  const cached = studioEnvs.get(scene);
-  if (cached) return cached;
-  const N = 32;
+  studioPixels ??= studioFaces();
+  return new RawCubeTexture(scene, studioPixels, STUDIO_SIZE);
+}
+
+function studioFaces(): Uint8Array[] {
+  const N = STUDIO_SIZE;
   // Babylon cube face order: +x, -x, +y, -y, +z, -z.
   const faces: [number, number, number][][] = [
     [[0, 0, -1], [0, -1, 0], [1, 0, 0]],
@@ -541,9 +601,7 @@ function studioEnvironment(scene: Scene): RawCubeTexture {
     }
     return px;
   });
-  const env = new RawCubeTexture(scene, data, N);
-  studioEnvs.set(scene, env);
-  return env;
+  return data;
 }
 
 /**
@@ -565,8 +623,8 @@ export function loadPaddleModel(
  * are sorted further by position/height/facing (see `pieceOf`):
  * - `frame`: rails and body in one, split by height at the model's `frameSplit` (rail / trim / body)
  * - `end`: an end rail with its corners and goal frame in one, split by position
- * - `corner`: its upward-facing top is the `cap` (the Ice table's snow caps)
- * - `leg`: its lowest part is the `foot` (the Ice table's frosty tips)
+ * - `corner`: its upward-facing top is the `cap`
+ * - `leg`: its lowest part is the `foot`
  */
 type TableRole = 'surface' | 'frame' | 'end' | 'rail' | 'corner' | 'cap' | 'snow' | 'body' | 'leg' | 'goal';
 type TablePiece = 'surface' | 'rail' | 'trim' | 'body' | 'corner' | 'cap' | 'leg' | 'foot' | 'goalFar' | 'goalNear';
@@ -615,9 +673,7 @@ const TABLE_MODELS: Record<string, TableModel> = {
       // Rails and body: the far-right quarter, mirrored both ways (the left rail's cut edges are
       // ragged where a mirror would show them).
       tripo_part_1: { role: 'frame', mirror: true, mirrorX: true },
-      // The far goal frame (its mirror is the player's goal), grown sideways only: grown down or
-      // out, its bottom corner would poke out of the table body.
-      tripo_part_10: { role: 'goal', mirror: true, grow: [1.06, 1, 1] },
+      // Its own goal frame (tripo_part_10) is left out: every table uses the shared goal (buildGoals).
       // Corners as modeled (the far ones' outer ends are torn, which a mirror would show); the
       // near-left one's end is torn too, so it is the near-right one mirrored.
       tripo_part_2: { role: 'corner', grow: [1.06, 1.06, 1.06] },
@@ -629,56 +685,45 @@ const TABLE_MODELS: Record<string, TableModel> = {
       tripo_part_6: { role: 'leg' },
     },
   },
-  // Concept asset_dPZ6CPZyCuVNJs1ssSyXfauM (cut out: asset_VsVm7MPzsMG4CcDBWa3yHeDL) → model
-  // asset_ydYrkoxJqEXX5v8E8TmkkSA1. Its surface came in 7 flat pieces; the near parts (goal box,
-  // near-left corner, near surface pieces) are left out and replaced by the far half's mirror.
-  ice: {
-    url: tableIceModelUrl,
-    innerX: [-0.2404, 0.2374],
-    innerZ: 0.4112,
-    surfaceY: 0.149,
-    capBottom: 0.2,
-    footTop: -4.1,
-    parts: {
-      tripo_part_10: { role: 'surface', mirror: true },
-      tripo_part_13: { role: 'surface', mirror: true },
-      tripo_part_15: { role: 'surface', mirror: true },
-      tripo_part_19: { role: 'surface', mirror: true },
-      tripo_part_2: { role: 'end', mirror: true }, // far rail, far corners and far goal frame
-      tripo_part_3: { role: 'rail', mirror: true },
-      tripo_part_8: { role: 'rail', mirror: true },
-      tripo_part_17: { role: 'cap', mirror: true },
-      tripo_part_18: { role: 'cap', mirror: true },
-      tripo_part_20: { role: 'cap', mirror: true },
-      tripo_part_21: { role: 'cap', mirror: true },
-      tripo_part_0: { role: 'snow', mirror: true },
-      tripo_part_1: { role: 'body', mirror: true },
-      tripo_part_4: { role: 'leg' },
-      tripo_part_5: { role: 'leg' },
-      tripo_part_6: { role: 'leg' },
-      tripo_part_12: { role: 'leg' },
-    },
-  },
 };
 
-/** Surface finish of a piece: toy plastic, glossy ice (bright edges), or soft matte snow. */
-type TableFinish = 'plastic' | 'ice' | 'snow';
-
 /**
- * A table skin: its Scenario model, a playing-surface image (with a pocket-colored band past
- * each goal line) and a color (plus optional finish) per piece, measured from its concept.
+ * A table built from a parts model: a playing-surface image (with a pocket-colored band past each
+ * goal line) and a color per piece, measured from its concept.
  */
-interface TableLook {
+interface PartsLook {
+  kind: 'parts';
   model: keyof typeof TABLE_MODELS;
   surface: string;
   /** Self-light on the surface image: more is brighter and closer to the image's own colors. */
   surfaceGlow: number;
   colors: Record<Exclude<TablePiece, 'surface'>, string>;
-  finish?: Partial<Record<Exclude<TablePiece, 'surface'>, TableFinish>>;
 }
+
+/**
+ * A table that is one fully textured Scenario model (multi-view concept → Tripo 3.1 Multi View),
+ * used as modeled. Measured in its own units: the rails' inner edges and the playing surface.
+ */
+interface TexturedLook {
+  kind: 'textured';
+  url: string;
+  innerX: [number, number];
+  innerZ: number;
+  surfaceY: number;
+  /** Stretches everything below the playing surface (body, legs) to match the classic table's height. */
+  stretchBelow?: number;
+  /**
+   * The texture already has the concept's painted light and shading (made with Tripo's "delight"
+   * off): shown as painted, unlit, so the colors are exactly the concept's.
+   */
+  unlit?: boolean;
+}
+
+type TableLook = PartsLook | TexturedLook;
 
 export const TABLE_LOOKS: Record<string, TableLook> = {
   classic: {
+    kind: 'parts',
     model: 'classic',
     surface: tableSurfaceUrl,
     surfaceGlow: 0.32,
@@ -687,17 +732,25 @@ export const TABLE_LOOKS: Record<string, TableLook> = {
       leg: '#1c3866', foot: '#1c3866', goalFar: '#ee2a2e', goalNear: '#0a78f5',
     },
   },
-  // Frosted rails, crystal corners with snow caps, indigo body with snow, frosty-footed legs.
-  ice: {
-    model: 'ice',
-    surface: tableIceSurfaceUrl,
-    surfaceGlow: 0.62,
-    colors: {
-      rail: '#62c4f0', trim: '#f4faff', body: '#123ea6', corner: '#0f98ec', cap: '#f4faff',
-      leg: '#0f2f78', foot: '#e6f4ff', goalFar: '#ff6a73', goalNear: '#0a5cf5',
-    },
-    finish: { rail: 'ice', corner: 'ice', trim: 'snow', cap: 'snow', foot: 'snow' },
-  },
+  // The Classic table's own shape (goals included), painted with a theme: a concept sheet drawn over
+  // the Classic reference views, projected onto the Classic geometry exported from the game
+  // (tools/table-pipeline). Already in game units, so it fits 1:1.
+  // Concept asset_fVLLAFSX5FZ2AKxtAnwGRQtv (Cosy Garden, for the Cat mallet).
+  garden: { kind: 'textured', url: tableGardenModelUrl, innerX: [-HALF_W, HALF_W], innerZ: HALF_L, surfaceY: 0, unlit: true },
+  // Same method, concept asset_U25M8r6HiVUq4LebQ6g3vgw7 (Cloudy, for the Rainbow mallet).
+  cloudy: { kind: 'textured', url: tableCloudyModelUrl, innerX: [-HALF_W, HALF_W], innerZ: HALF_L, surfaceY: 0, unlit: true },
+  // Same method, concept asset_txdQLNJPr5TwbGY3YD9N9YZW (Picnic, for the Watermelon mallet).
+  picnic: { kind: 'textured', url: tablePicnicModelUrl, innerX: [-HALF_W, HALF_W], innerZ: HALF_L, surfaceY: 0, unlit: true },
+  // Same method, concept asset_FUmbQ9dgmCX5XwDmxt1kLjKy (Beach), surface redrawn without the shells.
+  beach: { kind: 'textured', url: tableBeachModelUrl, innerX: [-HALF_W, HALF_W], innerZ: HALF_L, surfaceY: 0, unlit: true },
+  // Same method, concept asset_7ZGH2ApjJWE93s7svcR3WB85 (Ice Cream: waffle rails, chocolate body).
+  icecream: { kind: 'textured', url: tableIceCreamModelUrl, innerX: [-HALF_W, HALF_W], innerZ: HALF_L, surfaceY: 0, unlit: true },
+  // Same method, concept asset_4THRMSEvGfH97HHDH23hEoXf (Frozen: snow rails, ice-brick body).
+  frozen: { kind: 'textured', url: tableFrozenModelUrl, innerX: [-HALF_W, HALF_W], innerZ: HALF_L, surfaceY: 0, unlit: true },
+  // Same method, concept asset_DZGCwTfwbeQ216tPczHpo3dW (Dim Sum steamer, for the Panda mallet).
+  dimsum: { kind: 'textured', url: tableDimSumModelUrl, innerX: [-HALF_W, HALF_W], innerZ: HALF_L, surfaceY: 0, unlit: true },
+  // Same method, concept asset_bxXfXczSvy5voeskPTRLgc3j (Rainy day, for the Frog mallet).
+  rainy: { kind: 'textured', url: tableRainyModelUrl, innerX: [-HALF_W, HALF_W], innerZ: HALF_L, surfaceY: 0, unlit: true },
 };
 
 /** The surface image has a pocket-colored band past each goal line, this deep (world units). */
@@ -722,6 +775,7 @@ export async function loadTableModel(scene: Scene, table: TableParts, skin: stri
  */
 export async function buildTableModel(scene: Scene, parent: TransformNode, skin: string): Promise<Mesh[]> {
   const look = TABLE_LOOKS[skin] ?? TABLE_LOOKS.classic;
+  if (look.kind === 'textured') return buildTexturedTable(scene, parent, look);
   const geometry = await prepareTableGeometry(scene, look.model);
   if (parent.isDisposed()) return [];
   const meshes: Mesh[] = [];
@@ -739,7 +793,121 @@ export async function buildTableModel(scene: Scene, parent: TransformNode, skin:
     mesh.material.freeze();
     meshes.push(mesh);
   }
+  meshes.push(...(await buildGoals(scene, parent, look.colors.goalNear, look.colors.goalFar)));
   return meshes;
+}
+
+/** A fully textured table model, fitted to the physics walls, with its own painted materials. */
+async function buildTexturedTable(scene: Scene, parent: TransformNode, look: TexturedLook): Promise<Mesh[]> {
+  const { meshes } = await ImportMeshAsync(look.url, scene, { pluginExtension: '.glb' });
+  if (parent.isDisposed()) {
+    meshes[0].dispose(false, true); // with its materials and textures
+    return [];
+  }
+  fitTexturedModel(scene, parent, meshes[0], look);
+  const result: Mesh[] = [];
+  for (const m of meshes) {
+    m.isPickable = false;
+    const mat = m.material;
+    if (mat instanceof PBRMaterial) {
+      if (look.unlit) {
+        mat.unlit = true;
+      } else {
+        toPlastic(mat);
+        mat.emissiveTexture = mat.albedoTexture;
+        mat.emissiveColor = new Color3(0.05, 0.05, 0.05);
+        mat.directIntensity = 1.2;
+      }
+      // Seen at a slant: without anisotropic filtering the dots and lines smear.
+      for (const t of mat.getActiveTextures()) t.anisotropicFilteringLevel = 8;
+      mat.freeze();
+    }
+    if (m instanceof Mesh && m.getTotalVertices() > 0) result.push(m);
+  }
+  return result;
+}
+
+/**
+ * Fits a model in the textured table's own units (the table itself, or a piece cut out of it)
+ * under `parent`: scaled so its rails meet the physics walls, playing surface at y = 0, and
+ * stretched below the surface if the look asks for it.
+ */
+function fitTexturedModel(scene: Scene, parent: TransformNode, root: TransformNode, look: TexturedLook): void {
+  const [x0, x1] = look.innerX;
+  const sx = (2 * HALF_W) / (x1 - x0);
+  const sz = HALF_L / look.innerZ;
+  const sy = (sx + sz) / 2;
+  const fit = new TransformNode('tableFit', scene);
+  fit.parent = parent;
+  fit.scaling.set(sx, sy, sz);
+  fit.position.set((-(x0 + x1) / 2) * sx, -look.surfaceY * sy, 0);
+  root.parent = fit;
+  if (!look.stretchBelow) return;
+  for (const m of root.getChildMeshes()) {
+    if (m instanceof Mesh && m.getTotalVertices() > 0) stretchBelowSurface(m, sy, fit.position.y, look.stretchBelow);
+  }
+}
+
+/**
+ * goal.glb is in the units of the Tripo Ice table it was cut from (the table itself is gone):
+ * this fits it to the game the way that table was fitted.
+ */
+const GOAL_FIT: TexturedLook = {
+  kind: 'textured',
+  url: goalModelUrl,
+  innerX: [-0.2451, 0.2413],
+  innerZ: 0.4154,
+  surfaceY: 0.1102,
+  stretchBelow: 1.27,
+};
+
+/**
+ * Every table's goals share one shape: the old Ice table's player goal, cut out of its model with
+ * its dark pocket (goal.glb). Painted in the table's goal colors: `near` at the player's end, `far`
+ * (turned around) at the opponent's.
+ */
+async function buildGoals(scene: Scene, parent: TransformNode, near: string, far: string): Promise<Mesh[]> {
+  const fit = GOAL_FIT;
+  const result: Mesh[] = [];
+  for (const [color, turn] of [[near, 0], [far, Math.PI]] as const) {
+    const { meshes } = await ImportMeshAsync(goalModelUrl, scene, { pluginExtension: '.glb' });
+    if (parent.isDisposed()) {
+      meshes[0].dispose(false, true); // with its materials and textures
+      return result;
+    }
+    const holder = new TransformNode('goal', scene);
+    holder.parent = parent;
+    holder.rotation.y = turn;
+    fitTexturedModel(scene, holder, meshes[0], fit);
+    for (const m of meshes) {
+      if (!(m instanceof Mesh) || m.getTotalVertices() === 0) continue;
+      m.isPickable = false;
+      const pocket = m.material?.name === 'pocket';
+      m.material?.dispose(); // the file's placeholder material
+      m.material = pocket ? mat(scene, 'goalPocket', GOAL_POCKET, GOAL_POCKET.scale(0.3), 0) : plastic(scene, 'goalFrame', Color3.FromHexString(color));
+      m.material.freeze();
+      result.push(m);
+    }
+  }
+  return result;
+}
+
+const GOAL_POCKET = Color3.FromHexString('#10254f');
+
+/**
+ * Stretches a textured table model's vertices below the playing surface by `k` (in game units).
+ * The model's own node transforms only turn it about y, so a vertex's game height is simply
+ * `localY * scaleY + offsetY`.
+ */
+function stretchBelowSurface(mesh: Mesh, scaleY: number, offsetY: number, k: number): void {
+  const pos = mesh.getVerticesData('position');
+  if (!pos) return;
+  for (let i = 1; i < pos.length; i += 3) {
+    const y = pos[i] * scaleY + offsetY;
+    if (y < 0) pos[i] = (y * k - offsetY) / scaleY;
+  }
+  mesh.setVerticesData('position', pos);
+  mesh.refreshBoundingInfo();
 }
 
 type TableGeometry = Map<string, { pos: Float32Array; nrm: Float32Array; uv: Float32Array; idx: Uint32Array }>;
@@ -768,6 +936,9 @@ function prepareTableGeometry(scene: Scene, model: string): Promise<TableGeometr
 function pieceOf(role: TableRole, model: TableModel, x: number, y: number, z: number, up: number): TablePiece | null {
   switch (role) {
     case 'surface':
+      // Past the goal lines it was the old goal mouth's floor: the shared goal has its own, and
+      // this one is wider, so it would show around it.
+      return Math.abs(z) > HALF_L + 0.05 ? null : role;
     case 'rail':
     case 'body':
     case 'cap':
@@ -893,19 +1064,127 @@ async function extractTableGeometry(scene: Scene, model: TableModel): Promise<Ta
       }
     }
   }
-  meshes[0].dispose();
+  meshes[0].dispose(false, true); // with its materials and textures
   fit.dispose();
+  fillGoalOpenings(groups.get('rail'));
   const geometry: TableGeometry = new Map();
-  for (const [key, g] of groups) {
-    const count = g.pos.length / 3;
-    geometry.set(key, {
-      pos: new Float32Array(g.pos),
-      nrm: new Float32Array(g.nrm),
-      uv: new Float32Array(g.uv),
-      idx: Uint32Array.from({ length: count }, (_, i) => i),
-    });
-  }
+  for (const [key, g] of groups) geometry.set(key, weld(g.pos, g.nrm, g.uv));
   return geometry;
+}
+
+/**
+ * Triangles come out with three vertices each; corners they share are merged (same position,
+ * normal and uv), which cuts the vertex count ~3x for the GPU with the look unchanged.
+ */
+function weld(pos: number[], nrm: number[], uv: number[]): { pos: Float32Array; nrm: Float32Array; uv: Float32Array; idx: Uint32Array } {
+  const count = pos.length / 3;
+  const hasUv = uv.length > 0;
+  const seen = new Map<string, number>();
+  const idx = new Uint32Array(count);
+  const P: number[] = [];
+  const N: number[] = [];
+  const U: number[] = [];
+  const q = (v: number, s: number) => Math.round(v * s);
+  for (let i = 0; i < count; i++) {
+    const k =
+      `${q(pos[3 * i], 1e4)},${q(pos[3 * i + 1], 1e4)},${q(pos[3 * i + 2], 1e4)},` +
+      `${q(nrm[3 * i], 1e3)},${q(nrm[3 * i + 1], 1e3)},${q(nrm[3 * i + 2], 1e3)}` +
+      (hasUv ? `,${q(uv[2 * i], 1e5)},${q(uv[2 * i + 1], 1e5)}` : '');
+    let j = seen.get(k);
+    if (j === undefined) {
+      j = P.length / 3;
+      seen.set(k, j);
+      P.push(pos[3 * i], pos[3 * i + 1], pos[3 * i + 2]);
+      N.push(nrm[3 * i], nrm[3 * i + 1], nrm[3 * i + 2]);
+      if (hasUv) U.push(uv[2 * i], uv[2 * i + 1]);
+    }
+    idx[i] = j;
+  }
+  return { pos: new Float32Array(P), nrm: new Float32Array(N), uv: new Float32Array(U), idx };
+}
+
+/**
+ * The end rails are cut open (|x| < 1.46) for the model's own goal, which is wider than the shared
+ * one. Cuts each end rail at |x| = CUT (a straight stretch, past the opening's rounded edges) and
+ * bridges the two cuts with the rail's own cross-section there, extruded straight across, so the
+ * rail runs on unbroken with a watertight seam: all of it below the goal, and above only where
+ * the goal's posts hide it (not up through the pocket).
+ */
+function fillGoalOpenings(rail: { pos: number[]; nrm: number[] } | undefined): void {
+  if (!rail) return;
+  const CUT = 1.85; // between the opening (1.46) and the corner (2.05)
+  const POSTS = 1.34; // the goal's posts, inside |x| of the opening
+  const BELOW = -0.09; // the goal's underside
+  type V = number[]; // x, y, z, nx, ny, nz
+  const lerp = (a: V, b: V, t: number): V => a.map((v, i) => v + (b[i] - v) * t);
+  const pos: number[] = [];
+  const nrm: number[] = [];
+  const emit = (vs: V[]) => {
+    for (const v of vs) {
+      pos.push(v[0], v[1], v[2]);
+      nrm.push(v[3], v[4], v[5]);
+    }
+  };
+  // Which way a triangle faces relative to its vertex normals (the model's winding convention).
+  const facing = (a: V, b: V, c: V) => {
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
+    return Math.sign(n[0] * (a[3] + b[3] + c[3]) + n[1] * (a[4] + b[4] + c[4]) + n[2] * (a[5] + b[5] + c[5]));
+  };
+  const profile: [V, V, number][] = []; // cross-section segments at x = CUT, with their facing
+  for (let t = 0; t < rail.pos.length; t += 9) {
+    const tri: V[] = [0, 3, 6].map((k) => [...rail.pos.slice(t + k, t + k + 3), ...rail.nrm.slice(t + k, t + k + 3)]);
+    const cx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
+    const cz = (tri[0][2] + tri[1][2] + tri[2][2]) / 3;
+    if (Math.abs(cz) < HALF_L - 0.1 || Math.abs(cx) > CUT + 0.3) {
+      emit(tri);
+      continue;
+    }
+    // Keep only the part outside |x| = CUT (Sutherland–Hodgman against one plane).
+    const s = cx >= 0 ? 1 : -1;
+    const d = (v: V) => s * v[0] - CUT;
+    const kept: V[] = [];
+    const cut: V[] = [];
+    for (let i = 0; i < 3; i++) {
+      const a = tri[i];
+      const b = tri[(i + 1) % 3];
+      if (d(a) >= 0) kept.push(a);
+      if (d(a) >= 0 !== d(b) >= 0) {
+        const p = lerp(a, b, d(a) / (d(a) - d(b)));
+        kept.push(p);
+        cut.push(p);
+      }
+    }
+    for (let i = 1; i + 1 < kept.length; i++) emit([kept[0], kept[i], kept[i + 1]]);
+    if (s > 0 && cut.length === 2) profile.push([cut[0], cut[1], facing(tri[0], tri[1], tri[2])]);
+  }
+  // Bridge -CUT..CUT with each profile segment, split at the goal's underside.
+  const quad = (p: V, q: V, x0: number, x1: number, face: number) => {
+    const at = (v: V, x: number): V => [x, v[1], v[2], 0, v[4], v[5]];
+    const [a, b, c, e] = [at(p, x0), at(p, x1), at(q, x1), at(q, x0)];
+    const f = facing(a, b, c) || face;
+    emit(f === face ? [a, b, c, a, c, e] : [a, c, b, a, e, c]);
+  };
+  for (const [p, q, face] of profile) {
+    const pieces: [V, V][] = [];
+    const lowP = p[1] <= BELOW;
+    const lowQ = q[1] <= BELOW;
+    if (lowP === lowQ) pieces.push([p, q]);
+    else {
+      const m = lerp(p, q, (BELOW - p[1]) / (q[1] - p[1]));
+      pieces.push([p, m], [m, q]);
+    }
+    for (const [a, b] of pieces) {
+      if (Math.max(a[1], b[1]) <= BELOW + 1e-6) quad(a, b, -CUT, CUT, face);
+      else {
+        quad(a, b, -CUT, -POSTS, face);
+        quad(a, b, POSTS, CUT, face);
+      }
+    }
+  }
+  rail.pos = pos;
+  rail.nrm = nrm;
 }
 
 /** Y of a triangle's (unnormalized) face normal: its sign tells the winding seen from above. */
@@ -913,7 +1192,7 @@ function faceUp([a, b, c]: number[][]): number {
   return (b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]);
 }
 
-function tableMaterial(scene: Scene, key: string, look: TableLook): StandardMaterial {
+function tableMaterial(scene: Scene, key: string, look: PartsLook): StandardMaterial {
   if (key === 'surface') {
     const g = look.surfaceGlow;
     const m = mat(scene, 'tableSurface', Color3.White(), new Color3(g * 0.94, g, g * 1.12), 0.12);
@@ -924,27 +1203,7 @@ function tableMaterial(scene: Scene, key: string, look: TableLook): StandardMate
     m.specularPower = 64;
     return m;
   }
-  const piece = key as keyof TableLook['colors'];
-  const color = Color3.FromHexString(look.colors[piece]);
-  const finish = look.finish?.[piece] ?? 'plastic';
-  if (finish === 'ice') {
-    // Glossy ice: a sharp highlight and bright frosty edges where the surface turns away from the
-    // camera, like light caught in ice. (The emissive fresnel scales the glow from none facing
-    // the camera to full at the edges.)
-    const m = mat(scene, `table_${key}`, color, new Color3(0.42, 0.52, 0.6), 1);
-    m.specularPower = 96;
-    const edge = new FresnelParameters();
-    edge.leftColor = Color3.Black();
-    edge.rightColor = Color3.White();
-    edge.bias = 0;
-    edge.power = 3;
-    m.emissiveFresnelParameters = edge;
-    return m;
-  }
-  if (finish === 'snow') {
-    // Soft matte snow, lit a little from within so it stays white in the shade.
-    return mat(scene, `table_${key}`, color, color.scale(0.4), 0.05);
-  }
+  const color = Color3.FromHexString(look.colors[key as keyof PartsLook['colors']]);
   return plastic(scene, `table_${key}`, color);
 }
 
@@ -952,14 +1211,48 @@ function tableMaterial(scene: Scene, key: string, look: TableLook): StandardMate
  * Puck skins: Scenario models (concept image → Tripo 3.1), each 1 unit wide. `squashY` flattens a
  * model to the star puck's height (1 × 0.25), so every puck sits and plays the same.
  */
-const PUCK_LOOKS: Record<string, { url: string; squashY: number; color: string }> = {
-  star: { url: puckModelUrl, squashY: 0.9, color: '#ffc81f' }, // ~0.28 tall
-  macaron: { url: puckMacaronModelUrl, squashY: 0.67, color: '#ff6f9c' }, // ~0.375 tall; image asset_ttbvPV1wqhs4RqgZgPDhKY2S
+const PUCK_LOOKS: Record<string, { url: string; squashY: number; color: string; trail?: [string, string]; bits: string[]; bitsTint?: string }> = {
+  star: { url: puckModelUrl, squashY: 0.9, color: '#ffc81f', bits: [vfxStarUrl, vfxTwinkleUrl] }, // ~0.28 tall
+  // ~0.375 tall; image asset_ttbvPV1wqhs4RqgZgPDhKY2S
+  macaron: { url: puckMacaronModelUrl, squashY: 0.67, color: '#ff6f9c', bits: [vfxHeartUrl, vfxSprinklesUrl] },
+  // ~0.278 tall. Image asset_yDhfgexuhH1XCudHEst834cC → Tripo asset_zTFnYKj3q9Q8UrrxWxLWToFn.
+  // Its own icy-cyan trail: the usual darkened tail of its blue reads as a murky smear on pale tables.
+  snowflake: { url: puckSnowflakeModelUrl, squashY: 0.9, color: '#5cb8ff', trail: ['#9ee6ff', '#38c6ff'], bits: [vfxSnowflakeUrl, vfxFrostUrl], bitsTint: '#4cb8ff' },
+  // ~0.29 tall. Image asset_m3BQTXPwVz1PLwBFXgnjPPdu → Tripo asset_zB9ezhDvCZo5hCzJCgy6gnnb (made for the Cloudy table).
+  sun: { url: puckSunModelUrl, squashY: 0.87, color: '#ff9a1f', bits: [vfxSunUrl, vfxGoldSparkleUrl] },
+  // ~0.304 tall. Image asset_Y8JVBxM84diG8GXbgN7AEf7p → Tripo asset_CrXc3E5NcN74unAFwHFQpEeb (made for the
+  // Garden table). Bits: a mini ladybug + red dots.
+  ladybug: { url: puckLadybugModelUrl, squashY: 0.83, color: '#e8242a', bits: [vfxLadybugUrl, vfxRedDotUrl] },
+  // ~0.295 tall. Image asset_2TbAVFNt3sXJjAghywRGjtuw → Tripo asset_NJfQZKdxbicT57He3sSYZmUA (made for the
+  // Beach table). Bits: a mini beach ball + yellow dots.
+  beachball: { url: puckBeachBallModelUrl, squashY: 0.85, color: '#1e8cff', bits: [vfxBeachBallUrl, vfxYellowDotUrl] },
+  // ~0.283 tall. Image asset_1G5Asr58tX5bNC6xwZJYP3Xk → Tripo asset_C5Kgb3NknL7PTZVRwaDpv2y8 (made for the
+  // Picnic table). Bits: cherries + golden crust crumbs.
+  cherrypie: { url: puckCherryPieModelUrl, squashY: 0.89, color: '#e8a046', bits: [vfxCherryUrl, vfxCrustDotUrl] },
+  // ~0.396 tall (domed bun): squashed so its RIM matches the other pucks (~0.24), the bun stands a bit
+  // above it. Squashing the whole height to the star's made the rim look thin. Image asset_wbTjdLjhUrJgLn23ku2vxxDK → Tripo asset_xRbrXZvwJ3bGZsA7JdwBTY4N (made for
+  // the Dim Sum table). Bits: mini bao buns + steam swirls.
+  bao: { url: puckBaoModelUrl, squashY: 0.89, color: '#e2a948', bits: [vfxBaoUrl, vfxSteamUrl] },
+  // ~0.298 tall. Image asset_Pd25uE328Z5egtAF2mYNjCrn → Tripo asset_axRscQ6LzxjXhfU1Qe4McbSK (made for the
+  // Rainy table and the Frog mallet). Bits: leaves + raindrops.
+  lilypad: { url: puckLilyPadModelUrl, squashY: 0.85, color: '#5cc62a', bits: [vfxLeafUrl, vfxRainDropUrl] },
 };
+
+/** A puck skin's themed particle sprites (see PuckFx), and their tint (white bits need one to show on pale tables). */
+export function puckBits(skin: string): { sprites: string[]; tint: Color3 } {
+  const look = PUCK_LOOKS[skin] ?? PUCK_LOOKS.star;
+  return { sprites: look.bits, tint: Color3.FromHexString(look.bitsTint ?? '#ffffff') };
+}
 
 /** A puck skin's main color, for its speed trail and rail sparks. */
 export function puckColor(skin: string): Color3 {
   return Color3.FromHexString((PUCK_LOOKS[skin] ?? PUCK_LOOKS.star).color);
+}
+
+/** A puck skin's own speed-trail colors (head, tail), if it has them; otherwise the trail comes from its color. */
+export function puckTrail(skin: string): [Color3, Color3] | undefined {
+  const trail = (PUCK_LOOKS[skin] ?? PUCK_LOOKS.star).trail;
+  return trail && [Color3.FromHexString(trail[0]), Color3.FromHexString(trail[1])];
 }
 
 /**

@@ -5,6 +5,9 @@
 
 // glTF/GLB loader (registers the .glb/.gltf plugin).
 import '@babylonjs/loaders/glTF/2.0/glTFLoader';
+// Themed tables ship quantized (smaller files) and unlit (their texture has the concept's painted light).
+import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_mesh_quantization';
+import '@babylonjs/loaders/glTF/2.0/Extensions/KHR_materials_unlit';
 
 // Side-effect registrations for features used via scene/mesh methods.
 import '@babylonjs/core/Culling/ray'; // scene.createPickingRay
@@ -19,9 +22,9 @@ export { FreeCamera } from '@babylonjs/core/Cameras/freeCamera';
 export { DirectionalLight } from '@babylonjs/core/Lights/directionalLight';
 export { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight';
 export { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
-export { FresnelParameters } from '@babylonjs/core/Materials/fresnelParameters';
 export { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 export { Texture } from '@babylonjs/core/Materials/Textures/texture';
+export { BaseTexture } from '@babylonjs/core/Materials/Textures/baseTexture';
 export { Mesh } from '@babylonjs/core/Meshes/mesh';
 export { VertexData } from '@babylonjs/core/Meshes/mesh.vertexData';
 export { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder';

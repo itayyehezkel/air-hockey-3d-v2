@@ -37,3 +37,5 @@ Lock the app to portrait in Xcode (Deployment Info) / `AndroidManifest.xml`
 | `src/game/Effects.ts` | Hit sparks, shockwave rings, goal explosion |
 | `src/audio/Sound.ts` | Procedural WebAudio SFX + Capacitor haptics |
 | `src/babylon.ts` | Deep Babylon imports (keeps the bundle ~1.4 MB instead of ~6.7 MB) |
+| `tools/table-pipeline/` | Builds themed tables from a Scenario concept sheet (see its README) |
+| `CLAUDE.md` | Rules, workflows and current content for AI agents working on this project |

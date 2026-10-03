@@ -1,0 +1,85 @@
+<!doctype html><html><head><meta charset="utf-8">
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@7/babylon.js"></script></head>
+<body style="margin:0;background:#fff"><canvas id="c" width="512" height="512"></canvas><script>
+// Projection bake: paints the four aligned theme views onto the master table's texture layout.
+// Cameras are the exact ones the Classic reference views were rendered with.
+const VIEWS = [['front', -Math.PI / 2], ['left', 0], ['back', Math.PI / 2], ['right', Math.PI]];
+const TEX = 4096, DEPTH = 2048;
+const eng = new BABYLON.Engine(document.getElementById('c'), false, { preserveDrawingBuffer: true });
+const sc = new BABYLON.Scene(eng);
+
+async function loadMesh(url) {
+  const ab = await (await fetch(url)).arrayBuffer();
+  const dv = new DataView(ab);
+  const jl = dv.getUint32(12, true);
+  const js = JSON.parse(new TextDecoder().decode(new Uint8Array(ab, 20, jl)));
+  const bin = 20 + jl + 8;
+  const get = (i, T, n) => { const a = js.accessors[i], v = js.bufferViews[a.bufferView]; return new T(ab.slice(bin + v.byteOffset, bin + v.byteOffset + v.byteLength)); };
+  const p = js.meshes[0].primitives[0];
+  const vd = new BABYLON.VertexData();
+  vd.positions = get(p.attributes.POSITION, Float32Array); vd.normals = get(p.attributes.NORMAL, Float32Array);
+  vd.uvs = get(p.attributes.TEXCOORD_0, Float32Array); vd.indices = get(p.indices, Uint32Array);
+  const m = new BABYLON.Mesh('table', sc); vd.applyToMesh(m); m.computeWorldMatrix(true); m.alwaysSelectAsActiveMesh = true; return m;
+}
+
+BABYLON.Effect.ShadersStore.depthVertexShader = `precision highp float; attribute vec3 position; uniform mat4 world; uniform mat4 view; uniform mat4 viewProjection; varying float vz;
+void main(){ vec4 w = world*vec4(position,1.); vz = (view*w).z; gl_Position = viewProjection*w; }`;
+BABYLON.Effect.ShadersStore.depthFragmentShader = `precision highp float; varying float vz; void main(){ gl_FragColor = vec4(vz,0.,0.,1.); }`;
+
+BABYLON.Effect.ShadersStore.bakeVertexShader = `precision highp float; attribute vec3 position; attribute vec3 normal; attribute vec2 uv;
+uniform mat4 world; varying vec3 wp; varying vec3 wn; void main(){ wp = (world*vec4(position,1.)).xyz; wn = normal; gl_Position = vec4(uv*2.-1., 0.5, 1.); }`;
+BABYLON.Effect.ShadersStore.bakeFragmentShader = `#extension GL_OES_standard_derivatives : enable
+precision highp float; varying vec3 wp; varying vec3 wn;
+uniform mat4 vp0; uniform mat4 vp1; uniform mat4 vp2; uniform mat4 vp3; uniform mat4 v0; uniform mat4 v1; uniform mat4 v2; uniform mat4 v3;
+uniform vec3 c0; uniform vec3 c1; uniform vec3 c2; uniform vec3 c3; uniform float power; uniform float bias; uniform vec4 use;
+uniform sampler2D i0; uniform sampler2D i1; uniform sampler2D i2; uniform sampler2D i3; uniform sampler2D d0; uniform sampler2D d1; uniform sampler2D d2; uniform sampler2D d3;
+void take(mat4 vp, mat4 v, vec3 cp, sampler2D img, sampler2D dep, vec3 n, inout vec3 acc, inout float wsum){
+  vec4 cl = vp*vec4(wp,1.); vec2 s = cl.xy/cl.w*0.5+0.5; if(s.x<0.||s.y<0.||s.x>1.||s.y>1.) return;
+  float z = (v*vec4(wp,1.)).z; float dz = texture2D(dep, s).r; if(z > dz + bias) return;
+  float f = dot(n, normalize(cp-wp)); if(f<=0.) return;
+  // How many view pixels this texel covers: a view that sees the spot squashed (grazing, or a
+  // rail running away from the camera) has little real detail there and barely counts.
+  vec2 dx = dFdx(s), dy = dFdy(s); float area = abs(dx.x*dy.y - dx.y*dy.x) * 1.0e7;
+  float w = pow(f, 1.) * pow(area, power);
+  vec4 c = texture2D(img, s); if(c.a < 0.5) return; // background (cut out)
+  acc += w*c.rgb; wsum += w; }
+void main(){ vec3 n = normalize(wn); vec3 acc = vec3(0.); float ws = 0.;
+  if(use.x>0.) take(vp0,v0,c0,i0,d0,n,acc,ws); if(use.y>0.) take(vp1,v1,c1,i1,d1,n,acc,ws); if(use.z>0.) take(vp2,v2,c2,i2,d2,n,acc,ws); if(use.w>0.) take(vp3,v3,c3,i3,d3,n,acc,ws);
+  gl_FragColor = ws>0. ? vec4(acc/ws, 1.) : vec4(0.,0.,0.,0.); }`;
+
+window.bake = async (theme, power = 4, bias = 0.06, use = [1, 1, 1, 1], name = theme) => {
+  const mesh = await loadMesh('master-uv.glb');
+  const cams = VIEWS.map(([n, a]) => { const c = new BABYLON.ArcRotateCamera(n, a, 1.05, 30, new BABYLON.Vector3(0, -1.95, 0), sc); c.fov = 0.5; c.minZ = 0.5; c.maxZ = 100; return c; });
+  const proj = BABYLON.Matrix.PerspectiveFovLH(0.5, 1, 0.5, 100);
+  sc.activeCamera = cams[0]; sc.render(); // RTTs need the scene set up once
+  const depthMat = new BABYLON.ShaderMaterial('dm', sc, 'depth', { attributes: ['position'], uniforms: ['world', 'view', 'viewProjection'] });
+  depthMat.backFaceCulling = false;
+  while (!depthMat.isReady(mesh)) await new Promise((r) => setTimeout(r, 50));
+  const depths = [];
+  for (const c of cams) {
+    const rt = new BABYLON.RenderTargetTexture('d' + c.name, DEPTH, sc, false, true, BABYLON.Constants.TEXTURETYPE_FLOAT);
+    mesh.material = depthMat; rt.renderList = [mesh]; rt.activeCamera = c; rt.clearColor = new BABYLON.Color4(1e5, 0, 0, 1);
+    try { rt.render(); } catch (e) { throw new Error('depth ' + c.name + ': ' + e.message); } depths.push(rt);
+  }
+  const imgs = await Promise.all(VIEWS.map(([n]) => new Promise((r) => { const t = new BABYLON.Texture(`${theme}_${n}.png`, sc, false, true, BABYLON.Texture.TRILINEAR_SAMPLINGMODE, () => r(t)); })));
+  const bm = new BABYLON.ShaderMaterial('bm', sc, 'bake', { attributes: ['position', 'normal', 'uv'],
+    uniforms: ['world', 'vp0', 'vp1', 'vp2', 'vp3', 'v0', 'v1', 'v2', 'v3', 'c0', 'c1', 'c2', 'c3', 'power', 'bias', 'use'],
+    samplers: ['i0', 'i1', 'i2', 'i3', 'd0', 'd1', 'd2', 'd3'] });
+  bm.backFaceCulling = false;
+  cams.forEach((c, i) => {
+    const v = c.getViewMatrix(true); bm.setMatrix('v' + i, v); bm.setMatrix('vp' + i, v.multiply(proj)); bm.setVector3('c' + i, c.position);
+    bm.setTexture('i' + i, imgs[i]); bm.setTexture('d' + i, depths[i]);
+  });
+  bm.setFloat('power', power); bm.setFloat('bias', bias); bm.setVector4('use', new BABYLON.Vector4(...use));
+  const out = new BABYLON.RenderTargetTexture('bake', TEX, sc, false, true, BABYLON.Constants.TEXTURETYPE_UNSIGNED_BYTE);
+  mesh.material = bm; out.renderList = [mesh]; out.activeCamera = cams[0]; out.clearColor = new BABYLON.Color4(0, 0, 0, 0);
+  while (!bm.isReady(mesh)) await new Promise((r) => setTimeout(r, 50));
+  try { out.render(); } catch (e) { throw new Error('bake: ' + e.message); }
+  const px = await out.readPixels();
+  const cv = document.createElement('canvas'); cv.width = cv.height = TEX;
+  const ctx = cv.getContext('2d'); const id = ctx.createImageData(TEX, TEX); id.data.set(new Uint8ClampedArray(px.buffer)); ctx.putImageData(id, 0, 0);
+  const url = cv.toDataURL('image/png');
+  return await (await fetch(`http://127.0.0.1:8766/bake_${name}.png`, { method: 'POST', body: url })).text();
+};
+window.ready = true;
+</script></body></html>

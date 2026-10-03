@@ -4,13 +4,14 @@
  */
 
 import donutModelUrl from '../assets/mallet-donut.glb';
-import goldModelUrl from '../assets/mallet-gold.glb';
 import catModelUrl from '../assets/mallet-cat.glb';
 import frogModelUrl from '../assets/mallet-frog.glb';
 import iceModelUrl from '../assets/mallet-ice.glb';
 import pandaModelUrl from '../assets/mallet-panda.glb';
 import rainbowModelUrl from '../assets/mallet-rainbow.glb';
+import strawberryModelUrl from '../assets/mallet-strawberry.glb';
 import watermelonModelUrl from '../assets/watermelon.glb';
+import { clearFresh, homeStats, type ItemKey } from './Stats';
 
 export interface MalletSkin {
   id: string;
@@ -32,17 +33,21 @@ export interface MalletSkin {
   yaw?: number;
 }
 
+// Locker order = theme order (see CLAUDE.md "Theme sets"). Every level-up unlocks ONE item, set by set in Locker
+// order: the set's mallet, then its table, then its puck (levels 2, 3, 4 for Panda / Dim Sum / Bao Bun, and so on;
+// user, 2026-10-03: the table before the puck).
 export const MALLET_SKINS: MalletSkin[] = [
   { id: 'classic', name: 'CLASSIC', color: '#1f6bff', roughness: 0.25, glow: 0.12, unlockLevel: 1 },
-  { id: 'gold', name: 'GOLD', color: '#ffc629', roughness: 0.2, glow: 0.08, unlockLevel: 3, model: goldModelUrl, metal: true },
+  { id: 'panda', name: 'PANDA', color: '#3a3a4a', roughness: 0.22, glow: 0.12, unlockLevel: 2, model: pandaModelUrl, yaw: Math.PI },
+  { id: 'ice', name: 'ICE', color: '#8fdcff', roughness: 0.1, glow: 0.18, unlockLevel: 5, model: iceModelUrl },
+  { id: 'watermelon', name: 'WATERMELON', color: '#3ccf3c', roughness: 0.22, glow: 0.12, unlockLevel: 8, model: watermelonModelUrl },
+  { id: 'frog', name: 'FROG', color: '#5fd13a', roughness: 0.22, glow: 0.12, unlockLevel: 11, model: frogModelUrl, yaw: Math.PI },
+  { id: 'rainbow', name: 'RAINBOW', color: '#ff4fd8', roughness: 0.18, glow: 0.12, unlockLevel: 14, model: rainbowModelUrl },
   // Hit sparks use `color`, so it should read on the white table.
-  { id: 'donut', name: 'DONUT', color: '#ff6fb5', roughness: 0.22, glow: 0.12, unlockLevel: 5, model: donutModelUrl },
-  { id: 'ice', name: 'ICE', color: '#8fdcff', roughness: 0.1, glow: 0.18, unlockLevel: 8, model: iceModelUrl },
-  { id: 'panda', name: 'PANDA', color: '#3a3a4a', roughness: 0.22, glow: 0.12, unlockLevel: 10, model: pandaModelUrl, yaw: Math.PI },
-  { id: 'watermelon', name: 'WATERMELON', color: '#3ccf3c', roughness: 0.22, glow: 0.12, unlockLevel: 12, model: watermelonModelUrl },
-  { id: 'rainbow', name: 'RAINBOW', color: '#ff4fd8', roughness: 0.18, glow: 0.12, unlockLevel: 18, model: rainbowModelUrl },
-  { id: 'cat', name: 'CAT', color: '#ff8a1f', roughness: 0.22, glow: 0.12, unlockLevel: 22, model: catModelUrl, yaw: Math.PI },
-  { id: 'frog', name: 'FROG', color: '#5fd13a', roughness: 0.22, glow: 0.12, unlockLevel: 24, model: frogModelUrl, yaw: Math.PI },
+  { id: 'donut', name: 'DONUT', color: '#ff6fb5', roughness: 0.22, glow: 0.12, unlockLevel: 17, model: donutModelUrl },
+  // Image asset_c4MTRPpWu2fDgLzvmjfXdynn → Tripo (detailed texture) asset_1hW4z4h2NjxnNxUM4Nxjxroi.
+  { id: 'strawberry', name: 'STRAWBERRY', color: '#ff3b4a', roughness: 0.22, glow: 0.12, unlockLevel: 20, model: strawberryModelUrl },
+  { id: 'cat', name: 'CAT', color: '#ff8a1f', roughness: 0.22, glow: 0.12, unlockLevel: 23, model: catModelUrl, yaw: Math.PI },
 ];
 
 /** Table skins: the Scenario table shape, each with its own look (see Meshes.TABLE_LOOKS). */
@@ -54,7 +59,14 @@ export interface TableSkin {
 
 export const TABLE_SKINS: TableSkin[] = [
   { id: 'classic', name: 'CLASSIC', unlockLevel: 1 },
-  { id: 'ice', name: 'ICE', unlockLevel: 6 },
+  { id: 'dimsum', name: 'DIM SUM', unlockLevel: 3 },
+  { id: 'frozen', name: 'FROZEN', unlockLevel: 6 },
+  { id: 'beach', name: 'BEACH', unlockLevel: 9 },
+  { id: 'rainy', name: 'RAINY', unlockLevel: 12 },
+  { id: 'cloudy', name: 'CLOUDY', unlockLevel: 15 },
+  { id: 'icecream', name: 'ICE CREAM', unlockLevel: 18 },
+  { id: 'picnic', name: 'PICNIC', unlockLevel: 21 },
+  { id: 'garden', name: 'GARDEN', unlockLevel: 24 },
 ];
 
 /** Puck skins: each a Scenario puck model (see Meshes.PUCK_LOOKS). */
@@ -66,18 +78,63 @@ export interface PuckSkin {
 
 export const PUCK_SKINS: PuckSkin[] = [
   { id: 'star', name: 'STAR', unlockLevel: 1 },
-  { id: 'macaron', name: 'MACARON', unlockLevel: 4 },
+  { id: 'bao', name: 'BAO BUN', unlockLevel: 4 },
+  { id: 'snowflake', name: 'SNOWFLAKE', unlockLevel: 7 },
+  { id: 'beachball', name: 'BEACH BALL', unlockLevel: 10 },
+  { id: 'lilypad', name: 'LILY PAD', unlockLevel: 13 },
+  { id: 'sun', name: 'SUN', unlockLevel: 16 },
+  { id: 'macaron', name: 'MACARON', unlockLevel: 19 },
+  { id: 'cherrypie', name: 'CHERRY PIE', unlockLevel: 22 },
+  { id: 'ladybug', name: 'LADYBUG', unlockLevel: 25 },
 ];
 
-/**
- * Testing switch: while true every skin is open. Turn it off once player levels exist.
- * In dev builds, adding `?locked` to the URL shows the locked states without changing code.
- */
-export const UNLOCK_ALL = !(import.meta.env.DEV && location.search.includes('locked'));
+/** Testing switch: true opens every skin. Off now, so the Locker shows the real lock states. */
+export const UNLOCK_ALL = false;
 
-/** Until progression lands, the player is level 1. */
+/** The player's level, from the Home stats (a placeholder until progression exists: level 1, or `?stats=` in dev). */
 export function playerLevel(): number {
-  return 1;
+  return homeStats().level;
+}
+
+export type ItemKind = 'mallet' | 'puck' | 'table';
+
+/** The item a level unlocks (null for level 1 and past the last item), with its display name for the LEVEL UP popup. */
+export function unlockAt(level: number): { kind: ItemKind; id: string; name: string } | null {
+  const lists: [ItemKind, { id: string; name: string; unlockLevel: number }[]][] = [
+    ['mallet', MALLET_SKINS],
+    ['puck', PUCK_SKINS],
+    ['table', TABLE_SKINS],
+  ];
+  if (level <= 1) return null;
+  for (const [kind, list] of lists) {
+    const skin = list.find((s) => s.unlockLevel === level);
+    if (skin) return { kind, id: skin.id, name: `${skin.name} ${kind.toUpperCase()}` };
+  }
+  return null;
+}
+
+/** Whether the item behind a "kind:id" key exists and is unlocked. */
+export function isItemUnlocked(key: ItemKey): boolean {
+  const [kind, id] = key.split(':');
+  const list: { id: string; unlockLevel: number }[] = kind === 'mallet' ? MALLET_SKINS : kind === 'puck' ? PUCK_SKINS : TABLE_SKINS;
+  const skin = list.find((s) => s.id === id);
+  return !!skin && isUnlocked(skin);
+}
+
+/** Every item unlocked by going from level `from` to level `to` (the "NEW!" items of a level-up). */
+export function unlocksBetween(from: number, to: number): ItemKey[] {
+  const keys: ItemKey[] = [];
+  for (let level = from + 1; level <= to; level++) {
+    const item = unlockAt(level);
+    if (item) keys.push(`${item.kind}:${item.id}`);
+  }
+  return keys;
+}
+
+/** Equips any kind of item (the LEVEL UP popup's EQUIP button). */
+export function equipItem(kind: ItemKind, id: string): void {
+  save({ [kind]: id });
+  clearFresh(`${kind}:${id}`); // equipped once: no longer "NEW!"
 }
 
 export function isUnlocked(skin: { unlockLevel: number }): boolean {
@@ -120,7 +177,7 @@ export function equippedMallet(): MalletSkin {
 }
 
 export function equipMallet(id: string): void {
-  save({ mallet: id });
+  equipItem('mallet', id);
 }
 
 export function equippedPuck(): PuckSkin {
@@ -129,7 +186,7 @@ export function equippedPuck(): PuckSkin {
 }
 
 export function equipPuck(id: string): void {
-  save({ puck: id });
+  equipItem('puck', id);
 }
 
 export function equippedTable(): TableSkin {
@@ -138,5 +195,5 @@ export function equippedTable(): TableSkin {
 }
 
 export function equipTable(id: string): void {
-  save({ table: id });
+  equipItem('table', id);
 }

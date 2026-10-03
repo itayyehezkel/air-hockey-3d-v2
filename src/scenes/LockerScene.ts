@@ -1,7 +1,7 @@
 import { Color3, Color4, DirectionalLight, Engine, FreeCamera, HemisphericLight, Matrix, Scene, TransformNode, Vector3 } from '../babylon';
 import { CreateScreenshotUsingRenderTargetAsync } from '@babylonjs/core/Misc/screenshotTools';
 import { applyMalletLook, buildTableModel, loadPaddleModel, loadPuckModel } from '../game/Meshes';
-import type { Mesh } from '../babylon';
+import { fitToUnit } from '../game/ItemShot';
 import {
   equipMallet,
   equippedMallet,
@@ -19,6 +19,30 @@ import type { Screen } from './Screen';
 
 /** Card thumbnails are rendered from the 3D models once per session, then reused. */
 const thumbCache: Record<LockerKind, Map<string, string>> = { mallets: new Map(), pucks: new Map(), tables: new Map() };
+
+/**
+ * Card pictures shipped with the game (src/assets/thumbs/<mallet|puck|table>-<id>.webp): the Locker shows them at once
+ * instead of building every picture from its 3D model, which stuttered the Locker for ~4.5 s on every app start
+ * (frames of 66-100 ms, measured). Only an item without a shipped picture (a new one) is still rendered live.
+ * To (re)make them: run `python3 tools/ui/thumbsrv.py` from the project root, open the dev game with `?bakethumbs` and
+ * visit the Locker (every picture is rendered and saved to tools/ui/thumbs-out/), then move the files into
+ * src/assets/thumbs/.
+ */
+const SHIPPED_THUMBS = import.meta.glob<string>('../assets/thumbs/*.webp', { eager: true, import: 'default', query: '?url' });
+const BAKE_THUMBS = import.meta.env.DEV && location.search.includes('bakethumbs');
+const THUMB_KINDS = { mallet: 'mallets', puck: 'pucks', table: 'tables' } as const;
+if (!BAKE_THUMBS) {
+  for (const [path, url] of Object.entries(SHIPPED_THUMBS)) {
+    const m = /\/(mallet|puck|table)-([a-z0-9]+)\.webp$/.exec(path);
+    if (m) thumbCache[THUMB_KINDS[m[1] as keyof typeof THUMB_KINDS]].set(m[2], url);
+  }
+}
+
+/** Dev (?bakethumbs): sends a freshly rendered card picture to tools/ui/thumbsrv.py, which saves it. */
+function bakeThumb(kind: keyof typeof THUMB_KINDS, id: string, dataUrl: string): void {
+  if (!BAKE_THUMBS) return;
+  fetch(`http://127.0.0.1:8767/${kind}-${id}`, { method: 'POST', body: dataUrl }).catch((e) => console.warn('thumb bake failed', e));
+}
 
 /** Where the thumbnail studio sits: far off to the side, never inside the preview camera's view. */
 const THUMB_SPOT = new Vector3(200, 0, 0);
@@ -102,9 +126,14 @@ export class LockerScene implements Screen {
     ui.render('tables', TABLE_SKINS, equippedTable().id, thumbCache.tables);
     this.showTab(ui.tab);
     this.fit();
-    void this.renderThumbnails()
-      .then(() => this.renderPuckThumbnails())
-      .then(() => this.renderTableThumbnails());
+    // Card pictures, one kind after another (they share the studio spot): the open tab's first.
+    const renderers: Record<LockerTab, () => Promise<void>> = {
+      mallets: () => this.renderThumbnails(),
+      pucks: () => this.renderPuckThumbnails(),
+      tables: () => this.renderTableThumbnails(),
+    };
+    const order = [ui.tab, ...(['mallets', 'pucks', 'tables'] as const).filter((t) => t !== ui.tab)];
+    void order.reduce((chain, tab) => chain.then(renderers[tab]), Promise.resolve());
   }
 
   /** Each tab shows its own item on the pedestal. */
@@ -184,14 +213,21 @@ export class LockerScene implements Screen {
     const token = ++this.tableToken;
     const node = new TransformNode('lockerTable', this.scene);
     node.parent = this.tableFit;
+    // Hidden while it builds (its pieces arrive at game size, the goals last) and its shaders
+    // compile; then it replaces the old one in a single frame.
+    node.setEnabled(false);
     buildTableModel(this.scene, node, id)
-      .then((meshes) => {
+      .then(async (meshes) => {
+        if (token === this.tableToken) {
+          fitToUnit(node, meshes);
+          await Promise.all(meshes.map((m) => m.material?.forceCompilationAsync(m)));
+        }
         if (token !== this.tableToken) {
           node.dispose(false, true);
           return;
         }
-        fitToUnit(node, meshes);
         for (const old of this.tableFit.getChildren()) if (old !== node) old.dispose(false, true); // with its materials
+        node.setEnabled(true);
       })
       .catch((e) => console.warn('Locker table failed to load', e));
   }
@@ -242,6 +278,7 @@ export class LockerScene implements Screen {
         await this.scene.whenReadyAsync();
         const url = await CreateScreenshotUsingRenderTargetAsync(this.engine, cam, { width: 256, height: 256 }, 'image/png', 4, true);
         thumbCache.mallets.set(skin.id, url);
+        bakeThumb('mallet', skin.id, url);
         this.ui.setThumb('mallets', skin.id, url);
       }
     } finally {
@@ -269,6 +306,7 @@ export class LockerScene implements Screen {
         await this.scene.whenReadyAsync();
         const url = await CreateScreenshotUsingRenderTargetAsync(this.engine, cam, { width: 256, height: 256 }, 'image/png', 4, true);
         thumbCache.pucks.set(skin.id, url);
+        bakeThumb('puck', skin.id, url);
         this.ui.setThumb('pucks', skin.id, url);
       }
     } finally {
@@ -303,6 +341,7 @@ export class LockerScene implements Screen {
         const url = await CreateScreenshotUsingRenderTargetAsync(this.engine, cam, { width: 256, height: 256 }, 'image/png', 4, true);
         inner.dispose(false, true);
         thumbCache.tables.set(skin.id, url);
+        bakeThumb('table', skin.id, url);
         this.ui.setThumb('tables', skin.id, url);
       }
     } finally {
@@ -344,22 +383,4 @@ export class LockerScene implements Screen {
     this.spin = Math.max(-12, Math.min(12, this.spin));
     this.drag = null;
   };
-}
-
-/**
- * Scales a node holding the game-scale table so the table is one unit long, standing on y = 0
- * (its legs reach below the playing surface).
- */
-function fitToUnit(node: TransformNode, meshes: Mesh[]): void {
-  if (!meshes.length) return;
-  let minY = Infinity;
-  let span = 0;
-  for (const m of meshes) {
-    const { minimum, maximum } = m.getBoundingInfo().boundingBox;
-    minY = Math.min(minY, minimum.y);
-    span = Math.max(span, maximum.x - minimum.x, maximum.z - minimum.z);
-  }
-  const k = 1 / span;
-  node.scaling.scaleInPlace(k);
-  node.position.y = -minY * k;
 }
